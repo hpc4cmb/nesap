@@ -1,7 +1,7 @@
 
 # Getting the test data
 
-Run the "fetch.sh" script from this directory::
+Run the "fetch.sh" script from this directory:
 
     %>  ./fetch.sh
 
