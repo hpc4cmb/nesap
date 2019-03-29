@@ -1,2 +1,3 @@
-# nesap
-Sandbox for algorithm testing for NESAP program
+# NESAP Work
+
+Sandbox for algorithm testing for the TOAST / NESAP project.
