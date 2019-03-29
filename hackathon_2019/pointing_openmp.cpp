@@ -865,30 +865,28 @@ void toast::detector_pointing_healpix(
         }
         detpixels.at(detnames[d]).resize(nsamp);
         if (detweights.count(detnames[d]) == 0) {
-            detweights[detnames[d]] = std::vector <double> (nsamp);
+            detweights[detnames[d]] = std::vector <double> (3 * nsamp);
         }
-        detweights.at(detnames[d]).resize(nsamp);
+        detweights.at(detnames[d]).resize(3 * nsamp);
     }
 
-    // #pragma \
-    // omp parallel default(none) shared(nsamp, ndet, nside, nest, boresight, hwpang, detnames, detquat, detcal, deteps, detpixels, detweights)
+    #pragma \
+    omp parallel default(none) shared(nsamp, ndet, nside, nest, boresight, hwpang, detnames, detquat, detcal, deteps, detpixels, detweights)
     {
         double xaxis[3] = {1.0, 0.0, 0.0};
         double zaxis[3] = {0.0, 0.0, 1.0};
         double nullquat[4] = {0.0, 0.0, 0.0, 1.0};
         toast::HealpixPixels hpix(nside);
 
-        // #pragma omp for schedule(dynamic)
+        #pragma omp for schedule(dynamic)
         for (size_t d = 0; d < ndet; ++d) {
             auto const & dname = detnames[d];
             auto const & cal = detcal.at(dname);
             auto const & eps = deteps.at(dname);
             auto const & quat = detquat.at(dname);
 
-            // We have already pre-allocated these vectors in the std::map's,
-            // so it is safe to access the std::map from multiple threads.
-            auto & pixels = detpixels.at(dname);
-            auto & weights = detweights.at(dname);
+            std::vector <int64_t> pixels(nsamp);
+            std::vector <double> weights(3 * nsamp);
 
             double eta = (1.0 - eps) / (1.0 + eps);
 
@@ -903,13 +901,10 @@ void toast::detector_pointing_healpix(
                                       dir.data());
 
             // Sky pixel
-            // #pragma omp critical
-            {
-                if (nest) {
-                    hpix.vec2nest(nsamp, dir.data(), pixels.data());
-                } else {
-                    hpix.vec2ring(nsamp, dir.data(), pixels.data());
-                }
+            if (nest) {
+                hpix.vec2nest(nsamp, dir.data(), pixels.data());
+            } else {
+                hpix.vec2ring(nsamp, dir.data(), pixels.data());
             }
 
             // Orientation vector
@@ -926,7 +921,7 @@ void toast::detector_pointing_healpix(
             double * bx = buf1.data();
             double * by = buf2.data();
 
-            // #pragma omp simd
+            #pragma omp simd
             for (size_t i = 0; i < nsamp; ++i) {
                 size_t off = 3 * i;
                 by[i] = orient[off + 0] * dir[off + 1] - orient[off + 1] *
@@ -940,7 +935,7 @@ void toast::detector_pointing_healpix(
             toast::AlignedVector <double> detang(nsamp);
             toast::vfast_atan2(nsamp, by, bx, detang.data());
 
-            // #pragma omp simd
+            #pragma omp simd
             for (size_t i = 0; i < nsamp; ++i) {
                 detang[i] += 2.0 * hwpang[i];
                 detang[i] *= 2.0;
@@ -953,14 +948,17 @@ void toast::detector_pointing_healpix(
 
             toast::vfast_sincos(nsamp, detang.data(), sinout, cosout);
 
-            // #pragma omp critical
+            for (size_t i = 0; i < nsamp; ++i) {
+                size_t off = 3 * i;
+                weights[off + 0] = cal;
+                weights[off + 1] = cosout[i] * eta * cal;
+                weights[off + 2] = sinout[i] * eta * cal;
+            }
+
+            #pragma omp critical
             {
-                for (size_t i = 0; i < nsamp; ++i) {
-                    size_t off = 3 * i;
-                    weights[off + 0] = cal;
-                    weights[off + 1] = cosout[i] * eta * cal;
-                    weights[off + 2] = sinout[i] * eta * cal;
-                }
+                std::copy(pixels.begin(), pixels.end(), detpixels.at(dname).begin());
+                std::copy(weights.begin(), weights.end(), detweights.at(dname).begin());
             }
 
         }

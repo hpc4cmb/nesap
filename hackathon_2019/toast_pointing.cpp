@@ -19,6 +19,8 @@ int main(int argc, char * argv[]) {
         return 1;
     }
 
+    gt.start("Read inputs");
+
     std::string fpfile(argv[1]);
     std::string borefile(argv[2]);
 
@@ -78,6 +80,10 @@ int main(int argc, char * argv[]) {
         }
     }
 
+    gt.stop("Read inputs");
+
+    gt.start("Total Calculation");
+
     int64_t nside = 2048;
     bool nest = true;
 
@@ -94,6 +100,9 @@ int main(int argc, char * argv[]) {
                                      detnames, detquat,
                                      detcal, deteps,
                                      detpixels, detweights);
+
+    gt.stop("Total Calculation");
+    gt.report();
 
     return 0;
 }
