@@ -926,7 +926,7 @@ void toast::detector_pointing_healpix(
             double * bx = buf1.data();
             double * by = buf2.data();
 
-            #pragma omp simd
+            // #pragma omp simd
             for (size_t i = 0; i < nsamp; ++i) {
                 size_t off = 3 * i;
                 by[i] = orient[off + 0] * dir[off + 1] - orient[off + 1] *
@@ -940,7 +940,7 @@ void toast::detector_pointing_healpix(
             toast::AlignedVector <double> detang(nsamp);
             toast::vfast_atan2(nsamp, by, bx, detang.data());
 
-            #pragma omp simd
+            // #pragma omp simd
             for (size_t i = 0; i < nsamp; ++i) {
                 detang[i] += 2.0 * hwpang[i];
                 detang[i] *= 2.0;
