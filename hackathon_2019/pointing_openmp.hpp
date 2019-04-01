@@ -124,14 +124,18 @@ class HealpixPixels {
 
 void detector_pointing_healpix(
         int64_t nside, bool nest,
-        std::vector <double> const & boresight,
-        std::vector <double> const & hwpang,
-        std::vector <std::string> const & detnames,
-        std::map <std::string, std::vector <double> > const & detquat,
+        toast::AlignedVector <double> const & boresight,
+        toast::AlignedVector <double> const & hwpang,
+        toast::AlignedVector <std::string> const & detnames,
+        std::map <std::string, toast::AlignedVector <double> > const & detquat,
         std::map <std::string, double> const & detcal,
         std::map <std::string, double> const & deteps,
-        std::map <std::string, std::vector <int64_t> > & detpixels,
-        std::map <std::string, std::vector <double> > & detweights);
+        std::map <std::string, toast::AlignedVector <int64_t> > & detpixels,
+        std::map <std::string, toast::AlignedVector <double> > & detweights,
+        std::vector <double> & time_quat,
+        std::vector <double> & time_pix,
+        std::vector <double> & time_weight,
+        std::vector <double> & time_tot);
 
 }
 

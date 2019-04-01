@@ -8,6 +8,11 @@
 
 #include <cmath>
 #include <sstream>
+#include <iostream>
+
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 
 
 // Vector math needed for this test.
@@ -811,14 +816,18 @@ void toast::HealpixPixels::vec2ring(int64_t n, double const * vec,
 
 void toast::detector_pointing_healpix(
         int64_t nside, bool nest,
-        std::vector <double> const & boresight,
-        std::vector <double> const & hwpang,
-        std::vector <std::string> const & detnames,
-        std::map <std::string, std::vector <double> > const & detquat,
+        toast::AlignedVector <double> const & boresight,
+        toast::AlignedVector <double> const & hwpang,
+        toast::AlignedVector <std::string> const & detnames,
+        std::map <std::string, toast::AlignedVector <double> > const & detquat,
         std::map <std::string, double> const & detcal,
         std::map <std::string, double> const & deteps,
-        std::map <std::string, std::vector <int64_t> > & detpixels,
-        std::map <std::string, std::vector <double> > & detweights) {
+        std::map <std::string, toast::AlignedVector <int64_t> > & detpixels,
+        std::map <std::string, toast::AlignedVector <double> > & detweights,
+        std::vector <double> & time_quat,
+        std::vector <double> & time_pix,
+        std::vector <double> & time_weight,
+        std::vector <double> & time_tot) {
 
     size_t nsamp = (size_t)(boresight.size() / 4);
     if (hwpang.size() != nsamp) {
@@ -861,34 +870,48 @@ void toast::detector_pointing_healpix(
             throw std::runtime_error(o.str().c_str());
         }
         if (detpixels.count(detnames[d]) == 0) {
-            detpixels[detnames[d]] = std::vector <int64_t> (nsamp);
+            detpixels[detnames[d]] = toast::AlignedVector <int64_t> (nsamp);
         }
         detpixels.at(detnames[d]).resize(nsamp);
         if (detweights.count(detnames[d]) == 0) {
-            detweights[detnames[d]] = std::vector <double> (3 * nsamp);
+            detweights[detnames[d]] = toast::AlignedVector <double> (3 * nsamp);
         }
         detweights.at(detnames[d]).resize(3 * nsamp);
     }
 
     #pragma \
-    omp parallel default(none) shared(nsamp, ndet, nside, nest, boresight, hwpang, detnames, detquat, detcal, deteps, detpixels, detweights)
+    omp parallel default(none) shared(nsamp, ndet, nside, nest, boresight, hwpang, detnames, detquat, detcal, deteps, detpixels, detweights, time_quat, time_pix, time_weight, time_tot)
     {
         double xaxis[3] = {1.0, 0.0, 0.0};
         double zaxis[3] = {0.0, 0.0, 1.0};
         double nullquat[4] = {0.0, 0.0, 0.0, 1.0};
         toast::HealpixPixels hpix(nside);
 
+        toast::Timer tmquat;
+        toast::Timer tmpix;
+        toast::Timer tmweight;
+        toast::Timer tmtot;
+
+        int trank = 1;
+        #ifdef _OPENMP
+        trank = omp_get_thread_num();
+        #endif
+
         #pragma omp for schedule(dynamic)
         for (size_t d = 0; d < ndet; ++d) {
+            tmtot.start();
+
             auto const & dname = detnames[d];
             auto const & cal = detcal.at(dname);
             auto const & eps = deteps.at(dname);
             auto const & quat = detquat.at(dname);
 
-            std::vector <int64_t> pixels(nsamp);
-            std::vector <double> weights(3 * nsamp);
+            toast::AlignedVector <int64_t> pixels(nsamp);
+            toast::AlignedVector <double> weights(3 * nsamp);
 
             double eta = (1.0 - eps) / (1.0 + eps);
+
+            tmquat.start();
 
             // Compute detector quaternions
             toast::AlignedVector <double> pntg(4 * nsamp);
@@ -900,12 +923,20 @@ void toast::detector_pointing_healpix(
             toast::qa_rotate_many_one(nsamp, pntg.data(), zaxis,
                                       dir.data());
 
+            tmquat.stop();
+
+            tmpix.start();
+
             // Sky pixel
             if (nest) {
                 hpix.vec2nest(nsamp, dir.data(), pixels.data());
             } else {
                 hpix.vec2ring(nsamp, dir.data(), pixels.data());
             }
+
+            tmpix.stop();
+
+            tmweight.start();
 
             // Orientation vector
             toast::AlignedVector <double> orient(3 * nsamp);
@@ -955,14 +986,25 @@ void toast::detector_pointing_healpix(
                 weights[off + 2] = sinout[i] * eta * cal;
             }
 
+            tmweight.stop();
+
             #pragma omp critical
             {
                 std::copy(pixels.begin(), pixels.end(), detpixels.at(dname).begin());
                 std::copy(weights.begin(), weights.end(), detweights.at(dname).begin());
             }
 
-        }
+            tmtot.stop();
 
+            time_quat[trank] += tmquat.seconds();
+            tmquat.clear();
+            time_pix[trank] += tmpix.seconds();
+            tmpix.clear();
+            time_weight[trank] += tmweight.seconds();
+            tmweight.clear();
+            time_tot[trank] += tmtot.seconds();
+            tmtot.clear();
+        }
     }
 
     return;

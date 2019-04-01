@@ -8,7 +8,7 @@ from toast.tod import hex_layout, hex_pol_angles_qu
 
 # Create a simple hex focalplane.  This number of detectors might be typical
 # for the number per process in a full-machine run.
-npix = 19
+npix = 37
 pol = hex_pol_angles_qu(npix)
 fp = hex_layout(npix, 1.0, "det", "", pol)
 print(fp, flush=True)
