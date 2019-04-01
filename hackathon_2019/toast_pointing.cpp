@@ -206,30 +206,52 @@ int main(int argc, char * argv[]) {
                         << ", sample " << indx << " " << detpixels[dname][indx]
                         << " != " << checkpix[dname][i] << std::endl;
                 }
-                if (fabs(
-                    (checkweight[dname][3*i] - detweights[dname][3*indx]) /
-                     checkweight[dname][3*i]) > 1.0e-5) {
+                auto const & cweight = checkweight.at(dname);
+                double ci = cweight[3*i];
+                double cq = cweight[3*i+1];
+                double cu = cweight[3*i+2];
+                auto const & dweight = detweights.at(dname);
+                double di = dweight[3*i];
+                double dq = dweight[3*i+1];
+                double du = dweight[3*i+2];
+                double tol = 1.0e-5;
+
+                if (fabs(ci) > tol) {
+                    if (fabs((ci - di) / ci) > tol) {
+                        std::cout << "Stokes I mismatch:  detector " << dname
+                            << ", sample " << indx << " "
+                            << di << " != " << ci << std::endl;
+                    }
+                } else if (fabs(ci - di) > tol) {
                     std::cout << "Stokes I mismatch:  detector " << dname
                         << ", sample " << indx << " "
-                        << detweights[dname][3*indx]
-                        << " != " << checkweight[dname][3*i] << std::endl;
+                        << di << " != " << ci << std::endl;
                 }
-                if (fabs(
-                    (checkweight[dname][3*i+1] - detweights[dname][3*indx+1]) /
-                     checkweight[dname][3*i+1]) > 1.0e-5) {
+
+                if (fabs(cq) > tol) {
+                    if (fabs((cq - dq) / cq) > tol) {
+                        std::cout << "Stokes Q mismatch:  detector " << dname
+                            << ", sample " << indx << " "
+                            << dq << " != " << cq << std::endl;
+                    }
+                } else if (fabs(cq - dq) > tol) {
                     std::cout << "Stokes Q mismatch:  detector " << dname
                         << ", sample " << indx << " "
-                        << detweights[dname][3*indx+1]
-                        << " != " << checkweight[dname][3*i+1] << std::endl;
+                        << dq << " != " << cq << std::endl;
                 }
-                if (fabs(
-                    (checkweight[dname][3*i+2] - detweights[dname][3*indx+2]) /
-                     checkweight[dname][3*i+2]) > 1.0e-5) {
+
+                if (fabs(cu) > tol) {
+                    if (fabs((cu - du) / cu) > tol) {
+                        std::cout << "Stokes U mismatch:  detector " << dname
+                            << ", sample " << indx << " "
+                            << du << " != " << cu << std::endl;
+                    }
+                } else if (fabs(cu - du) > tol) {
                     std::cout << "Stokes U mismatch:  detector " << dname
                         << ", sample " << indx << " "
-                        << detweights[dname][3*indx+2]
-                        << " != " << checkweight[dname][3*i+2] << std::endl;
+                        << du << " != " << cu << std::endl;
                 }
+
             }
         }
     }
