@@ -1,9 +1,9 @@
 
 # Adjust these as needed
 CXX = icpc
-CXXFLAGS = -std=c++11 -O3 -g -fPIC -xavx -axmic-avx512 -pthread -qopenmp -DHAVE_MKL
+CXXFLAGS = -std=c++11 -O3 -xmic-avx512 -g -fPIC -qopenmp
 LDFLAGS =
-LINK = -qopenmp -lmkl_rt -liomp5 -lpthread -limf -lsvml -ldl
+LINK = -qopenmp -lm
 
 OBJS = toast_pointing.o pointing_openmp.o utils.o
 HEADERS = utils.hpp pointing_openmp.hpp

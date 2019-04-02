@@ -870,13 +870,25 @@ void toast::detector_pointing_healpix(
             throw std::runtime_error(o.str().c_str());
         }
         if (detpixels.count(detnames[d]) == 0) {
-            detpixels[detnames[d]] = toast::AlignedVector <int64_t> (nsamp);
+            std::ostringstream o;
+            o << "no pixel vector for det " << detnames[d];
+            throw std::runtime_error(o.str().c_str());
         }
-        detpixels.at(detnames[d]).resize(nsamp);
+        if (detpixels.at(detnames[d]).size() != nsamp) {
+            std::ostringstream o;
+            o << "wrong size pixel vector for det " << detnames[d];
+            throw std::runtime_error(o.str().c_str());
+        }
         if (detweights.count(detnames[d]) == 0) {
-            detweights[detnames[d]] = toast::AlignedVector <double> (3 * nsamp);
+            std::ostringstream o;
+            o << "no weight vector for det " << detnames[d];
+            throw std::runtime_error(o.str().c_str());
         }
-        detweights.at(detnames[d]).resize(3 * nsamp);
+        if (detweights.at(detnames[d]).size() != (3*nsamp)) {
+            std::ostringstream o;
+            o << "wrong size weight vector for det " << detnames[d];
+            throw std::runtime_error(o.str().c_str());
+        }
     }
 
     #pragma \

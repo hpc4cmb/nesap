@@ -28,11 +28,12 @@ efficiency) would require:
 
     30000 * (100 * 3600 * 24 * 365) * 8 bytes = 757 TB
 
-of memory.  On the cori-KNL system we have 9600 nodes each with ~90GB of
-usable memory.  So the aggregate total is 864TB.  If we ran with 16 MPI
-processes per node there would 153600 total processes.
+of memory for a single copy of the timestream data.  On the cori-KNL system
+we have 9600 nodes each with ~90GB of usable memory.  So the aggregate total
+is 864TB.  If we ran with 16 MPI processes per node there would be 153600 total
+processes.
 
 The dataset above is naturally split into 30-50 "observations" per day.  For
 this test we will assume that a single process has 37 detectors for 90
-observations of 30 minutes each.  This approximates the realistic data
+observations of 30 minutes each.  This approximates a realistic data
 distribution and cost of operations like the pointing calculation.

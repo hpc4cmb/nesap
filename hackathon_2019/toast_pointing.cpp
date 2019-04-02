@@ -131,6 +131,8 @@ int main(int argc, char * argv[]) {
     for (auto const & dname : detnames) {
         detpixels[dname].clear();
         detweights[dname].clear();
+        detpixels[dname].resize(hwpang.size());
+        detweights[dname].resize(3 * hwpang.size());
     }
 
     #ifdef _OPENMP
@@ -211,9 +213,9 @@ int main(int argc, char * argv[]) {
                 double cq = cweight[3*i+1];
                 double cu = cweight[3*i+2];
                 auto const & dweight = detweights.at(dname);
-                double di = dweight[3*i];
-                double dq = dweight[3*i+1];
-                double du = dweight[3*i+2];
+                double di = dweight[3*indx];
+                double dq = dweight[3*indx+1];
+                double du = dweight[3*indx+2];
                 double tol = 1.0e-5;
 
                 if (fabs(ci) > tol) {

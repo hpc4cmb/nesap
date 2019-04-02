@@ -1,8 +1,8 @@
 
 # Adjust these as needed
 CXX = icpc
-CXXFLAGS = -std=c++11 -O3 -g -fPIC -xavx -axmic-avx512 -pthread -qopenmp -DHAVE_MKL
-LDFLAGS =
+CXXFLAGS = -std=c++11 -O3 -xcore-avx2 -g -fPIC -pthread -qopenmp -DHAVE_MKL
+LDFLAGS = -L${MKLROOT}/lib/intel64
 LINK = -qopenmp -lmkl_rt -liomp5 -lpthread -limf -lsvml -ldl
 
 OBJS = toast_pointing.o pointing_openmp.o utils.o
