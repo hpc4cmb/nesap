@@ -1,0 +1,29 @@
+
+# Adjust these as needed
+CXX = g++
+CXXFLAGS = -O3 -march=native -fPIC -g -std=c++11
+
+LDFLAGS =
+LINK = -lcudart -lm
+
+NVCC = nvcc
+NVFLAGS = -std=c++11 -arch=compute_61
+
+OBJS = toast_pointing.o utils.o pointing_cuda.o
+
+HEADERS = utils.hpp pointing_cuda.hpp
+
+
+all : toast_pointing
+
+toast_pointing : $(OBJS)
+	$(NVCC) $(LDFLAGS) -o $@ $(OBJS) $(LINK)
+
+%.o : %.cu $(HEADERS)
+	$(NVCC) $(NVFLAGS) -I. -o $@ -c $<
+
+%.o : %.cpp $(HEADERS)
+	$(CXX) $(CXXFLAGS) -I. -o $@ -c $<
+
+clean :
+	rm -f toast_pointing *.o
