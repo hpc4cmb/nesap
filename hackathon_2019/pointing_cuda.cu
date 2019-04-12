@@ -541,7 +541,7 @@ void toast::detector_pointing_healpix(
     int tpb = 256;
 
     // Blocks per Grid
-    // int bpg = (int)((nsamp + threads_per_block - 1) / threads_per_block);
+    // int bpg = (int)((nsamp + tpb - 1) / tpb);
     int bpg = 32 * numSMs;
 
     for (size_t d = 0; d < ndet; ++d) {
