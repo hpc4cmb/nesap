@@ -1,0 +1,46 @@
+
+# Adjust these as needed
+
+CXX = g++
+CXXFLAGS = -O3 -march=native -fPIC -g -std=c++11
+OMPFLAGS = -fopenmp
+LDFLAGS =
+LINK = -lm
+
+NVCC = nvcc
+NVFLAGS = -std=c++11 -arch=compute_61
+NVLDFLAGS =
+NVLINK = -lcudart -lm
+
+COMMON_OBJS = utils.o
+OMP_OBJS = toast_pointing_omp.o pointing_openmp.o
+CUDA_OBJS = toast_pointing_cuda.o pointing_cuda.o
+
+HEADERS = utils.hpp pointing_cuda.hpp pointing_openmp.hpp
+
+
+all : toast_pointing_omp toast_pointing_cuda
+
+toast_pointing_cuda : $(CUDA_OBJS) $(COMMON_OBJS)
+	$(NVCC) $(NVLDFLAGS) -o $@ $(CUDA_OBJS) $(COMMON_OBJS) $(NVLINK)
+
+toast_pointing_omp : $(OMP_OBJS) $(COMMON_OBJS)
+	$(CXX) $(LDFLAGS) -o $@ $(OMP_OBJS) $(COMMON_OBJS) $(OMPFLAGS) $(LINK)
+
+utils.o : utils.cpp $(HEADERS)
+	$(CXX) $(CXXFLAGS) -I. -o $@ -c $<
+
+pointing_cuda.o : pointing_cuda.cu $(HEADERS)
+	$(NVCC) $(NVFLAGS) -I. -o $@ -c $<
+
+pointing_openmp.o : pointing_openmp.cpp $(HEADERS)
+	$(CXX) $(CXXFLAGS) $(OMPFLAGS) -I. -o $@ -c $<
+
+toast_pointing_omp.o : toast_pointing.cpp $(HEADERS)
+	$(CXX) $(CXXFLAGS) $(OMPFLAGS) -I. -o $@ -c $<
+
+toast_pointing_cuda.o : toast_pointing.cpp $(HEADERS)
+	$(CXX) $(CXXFLAGS) -I. -o $@ -c $<
+
+clean :
+	rm -f toast_pointing toast_pointing_* *.o

@@ -6,10 +6,13 @@
 #include <string>
 
 #include <utils.hpp>
-#include <pointing_openmp.hpp>
+
 
 #ifdef _OPENMP
 #include <omp.h>
+#include <pointing_openmp.hpp>
+#else
+#include <pointing_cuda.hpp>
 #endif
 
 
@@ -175,9 +178,13 @@ int main(int argc, char * argv[]) {
 
     #else
 
-    // Do something else...
-    std::cerr << "Only OpenMP version is implemented!" << std::endl;
-    exit(1);
+    for (size_t ob = 0; ob < nobs; ++ob) {
+        toast::detector_pointing_healpix(nside, nest,
+                                         boresight, hwpang,
+                                         detnames, detquat,
+                                         detcal, deteps,
+                                         detpixels, detweights);
+    }
 
     #endif
 
