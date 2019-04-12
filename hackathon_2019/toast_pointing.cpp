@@ -190,80 +190,80 @@ int main(int argc, char * argv[]) {
 
     gt.stop("Total Calculation");
 
-    // if (gen_check) {
-    //     // Create the data
-    //     std::ofstream handle("check.txt");
-    //     size_t stride = 1000;
-    //     for (auto const & dname : detnames) {
-    //         size_t off = 0;
-    //         while (off < hwpang.size()) {
-    //             handle << std::setprecision(16)
-    //                 << dname << " " << off << " " << detpixels[dname][off]
-    //                 << " " << detweights[dname][3*off+0]
-    //                 << " " << detweights[dname][3*off+1]
-    //                 << " " << detweights[dname][3*off+2] << std::endl;
-    //             off += stride;
-    //         }
-    //     }
-    // } else {
-    //     // Compare data
-    //     for (auto const & dname : detnames) {
-    //         for (size_t i = 0; i < checkindx.size(); ++i) {
-    //             auto indx = checkindx[dname][i];
-    //             if (checkpix[dname][i] != detpixels[dname][indx]) {
-    //                 std::cout << "Pixel mismatch:  detector " << dname
-    //                     << ", sample " << indx << " " << detpixels[dname][indx]
-    //                     << " != " << checkpix[dname][i] << std::endl;
-    //             }
-    //             auto const & cweight = checkweight.at(dname);
-    //             double ci = cweight[3*i];
-    //             double cq = cweight[3*i+1];
-    //             double cu = cweight[3*i+2];
-    //             auto const & dweight = detweights.at(dname);
-    //             double di = dweight[3*indx];
-    //             double dq = dweight[3*indx+1];
-    //             double du = dweight[3*indx+2];
-    //             double tol = 1.0e-5;
-    //
-    //             if (fabs(ci) > tol) {
-    //                 if (fabs((ci - di) / ci) > tol) {
-    //                     std::cout << "Stokes I mismatch:  detector " << dname
-    //                         << ", sample " << indx << " "
-    //                         << di << " != " << ci << std::endl;
-    //                 }
-    //             } else if (fabs(ci - di) > tol) {
-    //                 std::cout << "Stokes I mismatch:  detector " << dname
-    //                     << ", sample " << indx << " "
-    //                     << di << " != " << ci << std::endl;
-    //             }
-    //
-    //             if (fabs(cq) > tol) {
-    //                 if (fabs((cq - dq) / cq) > tol) {
-    //                     std::cout << "Stokes Q mismatch:  detector " << dname
-    //                         << ", sample " << indx << " "
-    //                         << dq << " != " << cq << std::endl;
-    //                 }
-    //             } else if (fabs(cq - dq) > tol) {
-    //                 std::cout << "Stokes Q mismatch:  detector " << dname
-    //                     << ", sample " << indx << " "
-    //                     << dq << " != " << cq << std::endl;
-    //             }
-    //
-    //             if (fabs(cu) > tol) {
-    //                 if (fabs((cu - du) / cu) > tol) {
-    //                     std::cout << "Stokes U mismatch:  detector " << dname
-    //                         << ", sample " << indx << " "
-    //                         << du << " != " << cu << std::endl;
-    //                 }
-    //             } else if (fabs(cu - du) > tol) {
-    //                 std::cout << "Stokes U mismatch:  detector " << dname
-    //                     << ", sample " << indx << " "
-    //                     << du << " != " << cu << std::endl;
-    //             }
-    //
-    //         }
-    //     }
-    // }
+    if (gen_check) {
+        // Create the data
+        std::ofstream handle("check.txt");
+        size_t stride = 1000;
+        for (auto const & dname : detnames) {
+            size_t off = 0;
+            while (off < hwpang.size()) {
+                handle << std::setprecision(16)
+                    << dname << " " << off << " " << detpixels[dname][off]
+                    << " " << detweights[dname][3*off+0]
+                    << " " << detweights[dname][3*off+1]
+                    << " " << detweights[dname][3*off+2] << std::endl;
+                off += stride;
+            }
+        }
+    } else {
+        // Compare data
+        for (auto const & dname : detnames) {
+            for (size_t i = 0; i < checkindx.size(); ++i) {
+                auto indx = checkindx[dname][i];
+                if (checkpix[dname][i] != detpixels[dname][indx]) {
+                    std::cout << "Pixel mismatch:  detector " << dname
+                        << ", sample " << indx << " " << detpixels[dname][indx]
+                        << " != " << checkpix[dname][i] << std::endl;
+                }
+                auto const & cweight = checkweight.at(dname);
+                double ci = cweight[3*i];
+                double cq = cweight[3*i+1];
+                double cu = cweight[3*i+2];
+                auto const & dweight = detweights.at(dname);
+                double di = dweight[3*indx];
+                double dq = dweight[3*indx+1];
+                double du = dweight[3*indx+2];
+                double tol = 1.0e-5;
+
+                if (fabs(ci) > tol) {
+                    if (fabs((ci - di) / ci) > tol) {
+                        std::cout << "Stokes I mismatch:  detector " << dname
+                            << ", sample " << indx << " "
+                            << di << " != " << ci << std::endl;
+                    }
+                } else if (fabs(ci - di) > tol) {
+                    std::cout << "Stokes I mismatch:  detector " << dname
+                        << ", sample " << indx << " "
+                        << di << " != " << ci << std::endl;
+                }
+
+                if (fabs(cq) > tol) {
+                    if (fabs((cq - dq) / cq) > tol) {
+                        std::cout << "Stokes Q mismatch:  detector " << dname
+                            << ", sample " << indx << " "
+                            << dq << " != " << cq << std::endl;
+                    }
+                } else if (fabs(cq - dq) > tol) {
+                    std::cout << "Stokes Q mismatch:  detector " << dname
+                        << ", sample " << indx << " "
+                        << dq << " != " << cq << std::endl;
+                }
+
+                if (fabs(cu) > tol) {
+                    if (fabs((cu - du) / cu) > tol) {
+                        std::cout << "Stokes U mismatch:  detector " << dname
+                            << ", sample " << indx << " "
+                            << du << " != " << cu << std::endl;
+                    }
+                } else if (fabs(cu - du) > tol) {
+                    std::cout << "Stokes U mismatch:  detector " << dname
+                        << ", sample " << indx << " "
+                        << du << " != " << cu << std::endl;
+                }
+
+            }
+        }
+    }
 
     gt.report();
 
