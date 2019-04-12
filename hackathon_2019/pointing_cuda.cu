@@ -45,10 +45,6 @@ typedef struct {
     uint64_t ctab[0x100];
 } hpix;
 
-// Global device location of healpix struct
-__device__ hpix * dev_hp;
-
-
 __host__ void hpix_init(hpix * hp, int64_t nside) {
     hp->nside = nside;
     hp->ncap = 2 * (nside * nside - nside);
@@ -83,7 +79,6 @@ __host__ void hpix_init(hpix * hp, int64_t nside) {
     return;
 }
 
-
 __device__ uint64_t hpix_xy2pix(hpix * hp, uint64_t x, uint64_t y) {
     return hp->utab[x & 0xff] | (hp->utab[(x >> 8) & 0xff] << 16) |
            (hp->utab[(x >> 16) & 0xff] << 32) |
@@ -92,7 +87,6 @@ __device__ uint64_t hpix_xy2pix(hpix * hp, uint64_t x, uint64_t y) {
            (hp->utab[(y >> 16) & 0xff] << 33) |
            (hp->utab[(y >> 24) & 0xff] << 49);
 }
-
 
 __device__ void hpix_vec2zphi(hpix * hp, double const * vec,
                               double * phi, int * region, double * z,
