@@ -600,7 +600,7 @@ void toast::detector_pointing_healpix(
         CUDA_CHECK(cudaEventRecord(sevents[d], streams[d]));
     }
 
-    // Loop over streams and processing completed ones until they are all done.
+    // Loop over streams and process completed ones until they are all done.
     size_t nfinished = 0;
     std::vector <bool> is_done(ndet);
     for (size_t d = 0; d < ndet; ++d) {
@@ -628,10 +628,10 @@ void toast::detector_pointing_healpix(
         }
     }
 
-    // Synchronize all streams
-    // for (size_t d = 0; d < ndet; ++d) {
-    //     CUDA_CHECK(cudaStreamSynchronize(streams[d]));
-    // }
+    // Synchronize all streams- should be a no-op...
+    for (size_t d = 0; d < ndet; ++d) {
+        CUDA_CHECK(cudaStreamSynchronize(streams[d]));
+    }
 
     // Free memory
 
