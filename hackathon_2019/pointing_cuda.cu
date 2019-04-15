@@ -294,9 +294,10 @@ __device__ void qa_mult(double const * p, double const * q, double * r) {
     return;
 }
 
+
 __device__ void stokes_weights(double hwpang, double cal, double eta,
                                double const * dir, double const * orient,
-                               double * weights) {
+                               float * weights) {
     double by = orient[0] * dir[1] - orient[1] * dir[0];
     double bx = orient[0] * (-dir[2] * dir[0]) +
          orient[1] * (-dir[2] * dir[1]) +
@@ -308,9 +309,9 @@ __device__ void stokes_weights(double hwpang, double cal, double eta,
     double cang;
     sincos(ang, &sang, &cang);
 
-    weights[0] = cal;
-    weights[1] = cang * eta * cal;
-    weights[2] = sang * eta * cal;
+    weights[0] = __double2float_rn(cal);
+    weights[1] = __double2float_rn(cang * eta * cal);
+    weights[2] = __double2float_rn(sang * eta * cal);
     return;
 }
 
@@ -324,7 +325,7 @@ __global__ void single_detector_nest(
         double const * hwpang,
         double const * boresight,
         int64_t * detpixels,
-        double * detweights
+        float * detweights
     ) {
     // This is the kernel function that works on one detector for some
     // number of samples.
@@ -341,8 +342,7 @@ __global__ void single_detector_nest(
         qa_rotate(quat, zaxis, dir);
         hpix_vec2nest(hp, dir, &(detpixels[i]));
         qa_rotate(quat, xaxis, orient);
-        stokes_weights(hwpang[i], cal, eta, dir, orient,
-                       &(detweights[3 * i]));
+        stokes_weights(hwpang[i], cal, eta, dir, orient, &(detweights[3 * i]));
     }
     return;
 }
@@ -357,7 +357,7 @@ __global__ void single_detector_ring(
         double const * hwpang,
         double const * boresight,
         int64_t * detpixels,
-        double * detweights
+        float * detweights
     ) {
     // This is the kernel function that works on one detector for some
     // number of samples.
@@ -374,8 +374,7 @@ __global__ void single_detector_ring(
         qa_rotate(quat, zaxis, dir);
         hpix_vec2ring(hp, dir, &(detpixels[i]));
         qa_rotate(quat, xaxis, orient);
-        stokes_weights(hwpang[i], cal, eta, dir, orient,
-                       &(detweights[3 * i]));
+        stokes_weights(hwpang[i], cal, eta, dir, orient, &(detweights[3 * i]));
     }
     return;
 }
@@ -520,10 +519,15 @@ void toast::detector_pointing_healpix(
     CUDA_CHECK(cudaMemcpy(dev_detquat, pin_detquat, ndet * 4 * sizeof(double),
                cudaMemcpyHostToDevice));
 
-    // As a starting point, create one CUDA stream per detector.
+    // As a starting point, create one CUDA stream per detector.  Also create
+    // one event per stream to indicate when the stream is done.
     cudaStream_t streams[ndet];
+    cudaEvent_t sevents[ndet];
     for (size_t d = 0; d < ndet; ++d) {
         CUDA_CHECK(cudaStreamCreate(&(streams[d])));
+        // CUDA_CHECK(cudaEventCreate(&(sevents[d])));
+        CUDA_CHECK(
+            cudaEventCreateWithFlags(&(sevents[d]), cudaEventDisableTiming));
     }
 
     // As a starting point, assume we run on the whole timestream for each
@@ -531,11 +535,20 @@ void toast::detector_pointing_healpix(
     // at which point it is easy to add an outer loop here over chunks of
     // samples.
 
-    // Allocate the output buffers for all detectors in device memory.
+    // Allocate the output buffers for all detectors in device memory.  We
+    // use floats for the Stokes weights and then convert to double before
+    // returning.
     int64_t * dev_detpixels;
-    double * dev_detweights;
     CUDA_CHECK(cudaMalloc(&dev_detpixels, ndet * nsamp * sizeof(int64_t)));
-    CUDA_CHECK(cudaMalloc(&dev_detweights, ndet * 3 * nsamp * sizeof(double)));
+    float * dev_detweights;
+    CUDA_CHECK(cudaMalloc(&dev_detweights, ndet * 3 * nsamp * sizeof(float)));
+
+    // Allocate pinned host memory for outputs
+    int64_t * pin_detpixels;
+    CUDA_CHECK(cudaMallocHost(&pin_detpixels, ndet * nsamp * sizeof(int64_t)));
+    float * pin_detweights;
+    CUDA_CHECK(cudaMallocHost(&pin_detweights,
+                              ndet * 3 * nsamp * sizeof(float)));
 
     // Threads per block
     int tpb = 256;
@@ -573,24 +586,55 @@ void toast::detector_pointing_healpix(
 
         // memcopy results to host data structure.
         CUDA_CHECK(
-            cudaMemcpyAsync(detpixels[detnames[d]].data(),
+            cudaMemcpyAsync(&(pin_detpixels[d * nsamp]),
                             &(dev_detpixels[d * nsamp]),
                             nsamp * sizeof(int64_t),
                             cudaMemcpyDeviceToHost, streams[d]));
         CUDA_CHECK(
-            cudaMemcpyAsync(detweights[detnames[d]].data(),
+            cudaMemcpyAsync(&(pin_detweights[d * 3 * nsamp]),
                             &(dev_detweights[d * 3 * nsamp]),
-                            3 * nsamp * sizeof(double),
+                            3 * nsamp * sizeof(float),
                             cudaMemcpyDeviceToHost, streams[d]));
+
+        // Set event here so we can check when a stream is complete.
+        CUDA_CHECK(cudaEventRecord(sevents[d], streams[d]));
     }
 
-    // Wait for all streams to finish.  Not sure if a device sync here would
-    // block other processes using the device...
+    // Loop over streams and processing completed ones until they are all done.
+    size_t nfinished = 0;
+    std::vector <bool> is_done(ndet);
     for (size_t d = 0; d < ndet; ++d) {
-        CUDA_CHECK(cudaStreamSynchronize(streams[d]));
+        is_done[d] = false;
     }
+    while (nfinished != ndet) {
+        for (size_t d = 0; d < ndet; ++d) {
+            if (! is_done[d]) {
+                if (cudaEventQuery(sevents[d]) == cudaSuccess) {
+                    std::memcpy(detpixels[detnames[d]].data(),
+                                &(pin_detpixels[d * nsamp]),
+                                nsamp * sizeof(int64_t));
+                    auto & dw = detweights[detnames[d]];
+                    size_t woff = d * 3 * nsamp;
+                    for (size_t i = 0; i < nsamp; ++i) {
+                        size_t off = 3 * i;
+                        dw[off] = (double)pin_detweights[woff + off];
+                        dw[off + 1] = (double)pin_detweights[woff + off + 1];
+                        dw[off + 2] = (double)pin_detweights[woff + off + 2];
+                    }
+                    nfinished += 1;
+                    is_done[d] = true;
+                }
+            }
+        }
+    }
+
+    // Synchronize all streams
+    // for (size_t d = 0; d < ndet; ++d) {
+    //     CUDA_CHECK(cudaStreamSynchronize(streams[d]));
+    // }
 
     // Free memory
+
     CUDA_CHECK(cudaFree(dev_detpixels));
     CUDA_CHECK(cudaFree(dev_detweights));
 
@@ -599,12 +643,16 @@ void toast::detector_pointing_healpix(
     CUDA_CHECK(cudaFree(dev_detquat));
     CUDA_CHECK(cudaFree(dev_hp));
 
+    CUDA_CHECK(cudaFreeHost(pin_detpixels));
+    CUDA_CHECK(cudaFreeHost(pin_detweights));
+
     CUDA_CHECK(cudaFreeHost(pin_boresight));
     CUDA_CHECK(cudaFreeHost(pin_hwpang));
     CUDA_CHECK(cudaFreeHost(pin_detquat));
     CUDA_CHECK(cudaFreeHost(hp));
 
     for (size_t d = 0; d < ndet; ++d) {
+        CUDA_CHECK(cudaEventDestroy(sevents[d]));
         CUDA_CHECK(cudaStreamDestroy(streams[d]));
     }
 
