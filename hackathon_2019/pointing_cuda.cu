@@ -10,14 +10,6 @@
 
 #include <cuda_runtime.h>
 
-static void CudaError(cudaError_t err, char const * file, int line) {
-    if (err != cudaSuccess) {
-        printf("%s in %s at line %d\n", cudaGetErrorString(err),
-               file, line);
-        exit(EXIT_FAILURE);
-    }
-}
-#define CUDA_CHECK(err) (CudaError(err, __FILE__, __LINE__))
 
 // 2/PI
 #define TWOINVPI 0.63661977236758134308
@@ -388,6 +380,7 @@ void toast::detector_pointing_healpix(
         std::map <std::string, toast::AlignedVector <double> > const & detquat,
         std::map <std::string, double> const & detcal,
         std::map <std::string, double> const & deteps,
+        int numSMs, cudaStream_t * streams,
         std::map <std::string, toast::AlignedVector <int64_t> > & detpixels,
         std::map <std::string, toast::AlignedVector <double> > & detweights) {
 
@@ -453,18 +446,11 @@ void toast::detector_pointing_healpix(
         }
     }
 
-    // Device query
-    int ndevice;
-    CUDA_CHECK(cudaGetDeviceCount(&ndevice));
-
-    // Choose first device for now
-    int dev_id = 0;
-    CUDA_CHECK(cudaSetDevice(dev_id));
-
-    // Find the number of SM's on this device
-    int numSMs;
-    CUDA_CHECK(cudaDeviceGetAttribute(
-        &numSMs, cudaDevAttrMultiProcessorCount, dev_id));
+    cudaEvent_t sevents[ndet];
+    for (size_t d = 0; d < ndet; ++d) {
+        CUDA_CHECK(
+            cudaEventCreateWithFlags(&(sevents[d]), cudaEventDisableTiming));
+    }
 
     // Normalize boresight quaternions and copy to device along with the HWP
     // angles.  Since we need to copy the input data anyway (in order to
@@ -518,17 +504,6 @@ void toast::detector_pointing_healpix(
 
     CUDA_CHECK(cudaMemcpy(dev_detquat, pin_detquat, ndet * 4 * sizeof(double),
                cudaMemcpyHostToDevice));
-
-    // As a starting point, create one CUDA stream per detector.  Also create
-    // one event per stream to indicate when the stream is done.
-    cudaStream_t streams[ndet];
-    cudaEvent_t sevents[ndet];
-    for (size_t d = 0; d < ndet; ++d) {
-        CUDA_CHECK(cudaStreamCreate(&(streams[d])));
-        // CUDA_CHECK(cudaEventCreate(&(sevents[d])));
-        CUDA_CHECK(
-            cudaEventCreateWithFlags(&(sevents[d]), cudaEventDisableTiming));
-    }
 
     // As a starting point, assume we run on the whole timestream for each
     // detector.  This may begin to approach the memory limits on the GPU,
@@ -628,11 +603,6 @@ void toast::detector_pointing_healpix(
         }
     }
 
-    // Synchronize all streams- should be a no-op...
-    for (size_t d = 0; d < ndet; ++d) {
-        CUDA_CHECK(cudaStreamSynchronize(streams[d]));
-    }
-
     // Free memory
 
     CUDA_CHECK(cudaFree(dev_detpixels));
@@ -653,7 +623,6 @@ void toast::detector_pointing_healpix(
 
     for (size_t d = 0; d < ndet; ++d) {
         CUDA_CHECK(cudaEventDestroy(sevents[d]));
-        CUDA_CHECK(cudaStreamDestroy(streams[d]));
     }
 
     return;
