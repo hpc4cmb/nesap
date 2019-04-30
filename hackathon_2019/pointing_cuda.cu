@@ -19,25 +19,7 @@
 
 // Healpix operations needed for this test.
 
-typedef struct {
-    int64_t nside;
-    int64_t npix;
-    int64_t ncap;
-    double dnside;
-    int64_t twonside;
-    int64_t fournside;
-    int64_t nsideplusone;
-    int64_t nsideminusone;
-    double halfnside;
-    double tqnside;
-    int64_t factor;
-    int64_t jr[12];
-    int64_t jp[12];
-    uint64_t utab[0x100];
-    uint64_t ctab[0x100];
-} hpix;
-
-__host__ void hpix_init(hpix * hp, int64_t nside) {
+void hpix_init(hpix * hp, int64_t nside) {
     hp->nside = nside;
     hp->ncap = 2 * (nside * nside - nside);
     hp->npix = 12 * nside * nside;
@@ -380,7 +362,11 @@ void toast::detector_pointing_healpix(
         std::map <std::string, toast::AlignedVector <double> > const & detquat,
         std::map <std::string, double> const & detcal,
         std::map <std::string, double> const & deteps,
-        int numSMs, cudaStream_t * streams,
+        int numSMs, cudaStream_t * streams, hpix * dev_hp,
+        double * host_boresight, double * host_hwpang, double * host_detquat,
+        double * dev_boresight, double * dev_hwpang, double * dev_detquat,
+        int64_t * host_detpixels, float * host_detweights,
+        int64_t * dev_detpixels, float * dev_detweights,
         std::map <std::string, toast::AlignedVector <int64_t> > & detpixels,
         std::map <std::string, toast::AlignedVector <double> > & detweights) {
 
@@ -452,78 +438,32 @@ void toast::detector_pointing_healpix(
             cudaEventCreateWithFlags(&(sevents[d]), cudaEventDisableTiming));
     }
 
-    // Normalize boresight quaternions and copy to device along with the HWP
-    // angles.  Since we need to copy the input data anyway (in order to
-    // normalize it), we put this into pinned memory.
 
-    double * pin_boresight;
-    double * pin_hwpang;
-    double * pin_detquat;
-
-    CUDA_CHECK(cudaMallocHost(&pin_boresight, 4 * nsamp * sizeof(double)));
-    std::memcpy(pin_boresight, boresight.data(), 4 * nsamp * sizeof(double));
-
-    CUDA_CHECK(cudaMallocHost(&pin_hwpang, nsamp * sizeof(double)));
-    std::memcpy(pin_hwpang, hwpang.data(), nsamp * sizeof(double));
-
-    CUDA_CHECK(cudaMallocHost(&pin_detquat, ndet * 4 * sizeof(double)));
     for (size_t d = 0; d < ndet; ++d) {
-        std::memcpy(&(pin_detquat[d * 4]), detquat.at(detnames[d]).data(),
+        std::memcpy(&(host_detquat[d * 4]), detquat.at(detnames[d]).data(),
                     4 * sizeof(double));
     }
 
-    qa_normalize_inplace(nsamp, pin_boresight);
+    std::memcpy(host_boresight, boresight.data(), 4 * nsamp * sizeof(double));
 
-    // Copy common data to the GPU
+    std::memcpy(host_hwpang, hwpang.data(), nsamp * sizeof(double));
 
-    hpix * hp;
-    CUDA_CHECK(cudaMallocHost(&hp, sizeof(hpix)));
-    hpix_init(hp, nside);
+    qa_normalize_inplace(nsamp, host_boresight);
 
-    hpix * dev_hp;
-    CUDA_CHECK(cudaMalloc(&dev_hp, sizeof(hpix)));
-
-    CUDA_CHECK(cudaMemcpy(dev_hp, hp, sizeof(hpix),
-                          cudaMemcpyHostToDevice));
-
-    double * dev_boresight;
-    CUDA_CHECK(cudaMalloc(&dev_boresight, 4 * nsamp * sizeof(double)));
-
-    double * dev_hwpang;
-    CUDA_CHECK(cudaMalloc(&dev_hwpang, nsamp * sizeof(double)));
-
-    double * dev_detquat;
-    CUDA_CHECK(cudaMalloc(&dev_detquat, ndet * 4 * sizeof(double)));
-
-    CUDA_CHECK(cudaMemcpy(dev_boresight, pin_boresight,
+    CUDA_CHECK(cudaMemcpy(dev_boresight, host_boresight,
                           4 * nsamp * sizeof(double),
                           cudaMemcpyHostToDevice));
 
-    CUDA_CHECK(cudaMemcpy(dev_hwpang, pin_hwpang, nsamp * sizeof(double),
+    CUDA_CHECK(cudaMemcpy(dev_hwpang, host_hwpang, nsamp * sizeof(double),
                cudaMemcpyHostToDevice));
 
-    CUDA_CHECK(cudaMemcpy(dev_detquat, pin_detquat, ndet * 4 * sizeof(double),
+    CUDA_CHECK(cudaMemcpy(dev_detquat, host_detquat, ndet * 4 * sizeof(double),
                cudaMemcpyHostToDevice));
 
     // As a starting point, assume we run on the whole timestream for each
     // detector.  This may begin to approach the memory limits on the GPU,
     // at which point it is easy to add an outer loop here over chunks of
     // samples.
-
-    // Allocate the output buffers for all detectors in device memory.  We
-    // use floats for the Stokes weights and then convert to double before
-    // returning.
-    int64_t * dev_detpixels;
-    CUDA_CHECK(cudaMalloc(&dev_detpixels, ndet * nsamp * sizeof(int64_t)));
-    float * dev_detweights;
-    CUDA_CHECK(cudaMalloc(&dev_detweights, ndet * 3 * nsamp * sizeof(float)));
-
-    // Allocate pinned host memory for outputs
-    int64_t * pin_detpixels;
-    CUDA_CHECK(cudaMallocHost(&pin_detpixels, ndet * nsamp * sizeof(int64_t)));
-    float * pin_detweights;
-    CUDA_CHECK(cudaMallocHost(&pin_detweights,
-                              ndet * 3 * nsamp * sizeof(float)));
 
     // Threads per block
     int tpb = 256;
@@ -561,12 +501,12 @@ void toast::detector_pointing_healpix(
 
         // memcopy results to host data structure.
         CUDA_CHECK(
-            cudaMemcpyAsync(&(pin_detpixels[d * nsamp]),
+            cudaMemcpyAsync(&(host_detpixels[d * nsamp]),
                             &(dev_detpixels[d * nsamp]),
                             nsamp * sizeof(int64_t),
                             cudaMemcpyDeviceToHost, streams[d]));
         CUDA_CHECK(
-            cudaMemcpyAsync(&(pin_detweights[d * 3 * nsamp]),
+            cudaMemcpyAsync(&(host_detweights[d * 3 * nsamp]),
                             &(dev_detweights[d * 3 * nsamp]),
                             3 * nsamp * sizeof(float),
                             cudaMemcpyDeviceToHost, streams[d]));
@@ -586,21 +526,134 @@ void toast::detector_pointing_healpix(
             if (! is_done[d]) {
                 if (cudaEventQuery(sevents[d]) == cudaSuccess) {
                     std::memcpy(detpixels[detnames[d]].data(),
-                                &(pin_detpixels[d * nsamp]),
+                                &(host_detpixels[d * nsamp]),
                                 nsamp * sizeof(int64_t));
                     auto & dw = detweights[detnames[d]];
                     size_t woff = d * 3 * nsamp;
                     for (size_t i = 0; i < nsamp; ++i) {
                         size_t off = 3 * i;
-                        dw[off] = (double)pin_detweights[woff + off];
-                        dw[off + 1] = (double)pin_detweights[woff + off + 1];
-                        dw[off + 2] = (double)pin_detweights[woff + off + 2];
+                        dw[off] = (double)host_detweights[woff + off];
+                        dw[off + 1] = (double)host_detweights[woff + off + 1];
+                        dw[off + 2] = (double)host_detweights[woff + off + 2];
                     }
                     nfinished += 1;
                     is_done[d] = true;
                 }
             }
         }
+    }
+
+    // Free memory
+
+    for (size_t d = 0; d < ndet; ++d) {
+        CUDA_CHECK(cudaEventDestroy(sevents[d]));
+    }
+
+    return;
+}
+
+
+void toast::pointing(
+    int64_t nside, bool nest,
+    toast::AlignedVector <double> const & boresight,
+    toast::AlignedVector <double> const & hwpang,
+    toast::AlignedVector <std::string> const & detnames,
+    std::map <std::string, toast::AlignedVector <double> > const & detquat,
+    std::map <std::string, double> const & detcal,
+    std::map <std::string, double> const & deteps,
+    std::map <std::string, toast::AlignedVector <int64_t> > & detpixels,
+    std::map <std::string, toast::AlignedVector <double> > & detweights, size_t nobs) {
+
+    size_t ndet = detnames.size();
+
+    // Device query
+    int ndevice;
+    CUDA_CHECK(cudaGetDeviceCount(&ndevice));
+
+    // Choose first device for now
+    int dev_id = 0;
+    CUDA_CHECK(cudaSetDevice(dev_id));
+
+    // Find the number of SM's on this device
+    int numSMs;
+    CUDA_CHECK(cudaDeviceGetAttribute(
+        &numSMs, cudaDevAttrMultiProcessorCount, dev_id));
+
+    // As a starting point, create one CUDA stream per detector.  Also create
+    // one event per stream to indicate when the stream is done.
+    cudaStream_t streams[ndet];
+
+    for (size_t d = 0; d < ndet; ++d) {
+        CUDA_CHECK(cudaStreamCreate(&(streams[d])));
+    }
+
+    // Copy common data to the GPU
+
+    hpix * hp;
+    CUDA_CHECK(cudaMallocHost(&hp, sizeof(hpix)));
+    hpix_init(hp, nside);
+
+    hpix * dev_hp;
+    CUDA_CHECK(cudaMalloc(&dev_hp, sizeof(hpix)));
+
+    CUDA_CHECK(cudaMemcpy(dev_hp, hp, sizeof(hpix),
+                          cudaMemcpyHostToDevice));
+
+    // The maximum number of samples across all observations.  For real data
+    // we would also compute the maximum number of detectors.  For this test, the
+    // number of detectors is always the same.
+
+    size_t nsamp = hwpang.size();
+
+    // Allocate input buffers on host and device to be re-used
+
+    double * host_boresight;
+    CUDA_CHECK(cudaMallocHost(&host_boresight, 4 * nsamp * sizeof(double)));
+
+    double * host_hwpang;
+    CUDA_CHECK(cudaMallocHost(&host_hwpang, nsamp * sizeof(double)));
+
+    double * host_detquat;
+    CUDA_CHECK(cudaMallocHost(&host_detquat, ndet * 4 * sizeof(double)));
+
+    double * dev_boresight;
+    CUDA_CHECK(cudaMalloc(&dev_boresight, 4 * nsamp * sizeof(double)));
+
+    double * dev_hwpang;
+    CUDA_CHECK(cudaMalloc(&dev_hwpang, nsamp * sizeof(double)));
+
+    double * dev_detquat;
+    CUDA_CHECK(cudaMalloc(&dev_detquat, ndet * 4 * sizeof(double)));
+
+    // Allocate the output buffers for all detectors in device memory.  We
+    // use floats for the Stokes weights and then convert to double before
+    // returning.
+
+    int64_t * dev_detpixels;
+    CUDA_CHECK(cudaMalloc(&dev_detpixels, ndet * nsamp * sizeof(int64_t)));
+
+    float * dev_detweights;
+    CUDA_CHECK(cudaMalloc(&dev_detweights, ndet * 3 * nsamp * sizeof(float)));
+
+    // Allocate pinned host memory for outputs
+
+    int64_t * host_detpixels;
+    CUDA_CHECK(cudaMallocHost(&host_detpixels, ndet * nsamp * sizeof(int64_t)));
+
+    float * host_detweights;
+    CUDA_CHECK(cudaMallocHost(&host_detweights,
+                              ndet * 3 * nsamp * sizeof(float)));
+
+    for (size_t ob = 0; ob < nobs; ++ob) {
+        toast::detector_pointing_healpix(nside, nest,
+                                         boresight, hwpang,
+                                         detnames, detquat,
+                                         detcal, deteps, numSMs, streams, dev_hp,
+                                         host_boresight, host_hwpang, host_detquat,
+                                         dev_boresight, dev_hwpang, dev_detquat,
+                                         host_detpixels, host_detweights,
+                                         dev_detpixels, dev_detweights,
+                                         detpixels, detweights);
     }
 
     // Free memory
@@ -613,16 +666,18 @@ void toast::detector_pointing_healpix(
     CUDA_CHECK(cudaFree(dev_detquat));
     CUDA_CHECK(cudaFree(dev_hp));
 
-    CUDA_CHECK(cudaFreeHost(pin_detpixels));
-    CUDA_CHECK(cudaFreeHost(pin_detweights));
+    CUDA_CHECK(cudaFreeHost(host_detpixels));
+    CUDA_CHECK(cudaFreeHost(host_detweights));
 
-    CUDA_CHECK(cudaFreeHost(pin_boresight));
-    CUDA_CHECK(cudaFreeHost(pin_hwpang));
-    CUDA_CHECK(cudaFreeHost(pin_detquat));
+    CUDA_CHECK(cudaFreeHost(host_boresight));
+    CUDA_CHECK(cudaFreeHost(host_hwpang));
+    CUDA_CHECK(cudaFreeHost(host_detquat));
     CUDA_CHECK(cudaFreeHost(hp));
 
+    // Synchronize all streams and then destroy.
     for (size_t d = 0; d < ndet; ++d) {
-        CUDA_CHECK(cudaEventDestroy(sevents[d]));
+        CUDA_CHECK(cudaStreamSynchronize(streams[d]));
+        CUDA_CHECK(cudaStreamDestroy(streams[d]));
     }
 
     return;

@@ -8,7 +8,7 @@ LDFLAGS =
 LINK = -lm
 
 NVCC = nvcc
-NVFLAGS = -std=c++11 -arch=compute_70
+NVFLAGS = -std=c++11 -arch=compute_70 -lineinfo
 NVLDFLAGS =
 NVLINK = -lcudart -lm
 

@@ -177,44 +177,8 @@ int main(int argc, char * argv[]) {
 
     #else
 
-
-
-    size_t ndet = detnames.size();
-
-    // Device query
-    int ndevice;
-    CUDA_CHECK(cudaGetDeviceCount(&ndevice));
-
-    // Choose first device for now
-    int dev_id = 0;
-    CUDA_CHECK(cudaSetDevice(dev_id));
-
-    // Find the number of SM's on this device
-    int numSMs;
-    CUDA_CHECK(cudaDeviceGetAttribute(
-        &numSMs, cudaDevAttrMultiProcessorCount, dev_id));
-
-    // As a starting point, create one CUDA stream per detector.  Also create
-    // one event per stream to indicate when the stream is done.
-    cudaStream_t streams[ndet];
-
-    for (size_t d = 0; d < ndet; ++d) {
-        CUDA_CHECK(cudaStreamCreate(&(streams[d])));
-    }
-
-    for (size_t ob = 0; ob < nobs; ++ob) {
-        toast::detector_pointing_healpix(nside, nest,
-                                         boresight, hwpang,
-                                         detnames, detquat,
-                                         detcal, deteps, numSMs, streams,
-                                         detpixels, detweights);
-    }
-
-    // Synchronize all streams and then destroy.
-    for (size_t d = 0; d < ndet; ++d) {
-        CUDA_CHECK(cudaStreamSynchronize(streams[d]));
-        CUDA_CHECK(cudaStreamDestroy(streams[d]));
-    }
+    toast::pointing(nside, nest, boresight, hwpang, detnames, detquat, detcal,
+                    deteps, detpixels, detweights, nobs);
 
     #endif
 
