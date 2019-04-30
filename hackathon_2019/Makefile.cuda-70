@@ -10,7 +10,7 @@ LINK = -lm
 NVCC = nvcc
 NVFLAGS = -std=c++11 -arch=compute_70 -lineinfo
 NVLDFLAGS =
-NVLINK = -lcudart -lm
+NVLINK = -lcudart -lm -lnvToolsExt
 
 COMMON_OBJS = utils.o
 OMP_OBJS = toast_pointing_omp.o pointing_openmp.o
