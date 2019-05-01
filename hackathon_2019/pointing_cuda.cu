@@ -526,7 +526,9 @@ void toast::detector_pointing_healpix(
         for (size_t d = 0; d < ndet; ++d) {
             if (! is_done[d]) {
                 if (cudaEventQuery(sevents[d]) == cudaSuccess) {
+                    #ifdef HAVE_NVTX
                     nvtxRangePushA("memcpy");
+                    #endif
                     std::memcpy(detpixels[detnames[d]].data(),
                                 &(host_detpixels[d * nsamp]),
                                 nsamp * sizeof(int64_t));
@@ -540,7 +542,9 @@ void toast::detector_pointing_healpix(
                     }
                     nfinished += 1;
                     is_done[d] = true;
+                    #ifdef HAVE_NVTX
                     nvtxRangePop();
+                    #endif
                 }
             }
         }

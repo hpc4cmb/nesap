@@ -8,7 +8,7 @@ LDFLAGS =
 LINK = -lm
 
 NVCC = nvcc
-NVFLAGS = -std=c++11 -arch=compute_70 -lineinfo
+NVFLAGS = -std=c++11 -arch=compute_70 -lineinfo -DHAVE_NVTX=1
 NVLDFLAGS =
 NVLINK = -lcudart -lm -lnvToolsExt
 
@@ -40,7 +40,7 @@ toast_pointing_omp.o : toast_pointing.cpp $(HEADERS)
 	$(CXX) $(CXXFLAGS) $(OMPFLAGS) -I. -o $@ -c $<
 
 toast_pointing_cuda.o : toast_pointing.cpp $(HEADERS)
-	$(NVCC) $(NVFLAGS) -I. -o $@ -c $<
+	$(CXX) $(CXXFLAGS) -I. -o $@ -c $<
 
 clean :
 	rm -f toast_pointing toast_pointing_* *.o

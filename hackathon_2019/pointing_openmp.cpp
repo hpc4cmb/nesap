@@ -1019,3 +1019,54 @@ void toast::detector_pointing_healpix(
 
     return;
 }
+
+
+void toast::pointing(
+    int64_t nside, bool nest,
+    toast::AlignedVector <double> const & boresight,
+    toast::AlignedVector <double> const & hwpang,
+    toast::AlignedVector <std::string> const & detnames,
+    std::map <std::string, toast::AlignedVector <double> > const & detquat,
+    std::map <std::string, double> const & detcal,
+    std::map <std::string, double> const & deteps,
+    std::map <std::string, toast::AlignedVector <int64_t> > & detpixels,
+    std::map <std::string, toast::AlignedVector <double> > & detweights, size_t nobs) {
+
+    int nthreads = omp_get_max_threads();
+
+    std::vector <double> time_quat(nthreads);
+    time_quat.assign(nthreads, 0.0);
+
+    std::vector <double> time_pix(nthreads);
+    time_pix.assign(nthreads, 0.0);
+
+    std::vector <double> time_weight(nthreads);
+    time_weight.assign(nthreads, 0.0);
+
+    std::vector <double> time_tot(nthreads);
+    time_tot.assign(nthreads, 0.0);
+
+    for (size_t ob = 0; ob < nobs; ++ob) {
+        toast::detector_pointing_healpix(nside, nest,
+                                         boresight, hwpang,
+                                         detnames, detquat,
+                                         detcal, deteps,
+                                         detpixels, detweights,
+                                         time_quat, time_pix,
+                                         time_weight, time_tot);
+    }
+
+    for (int i = 0; i < nthreads; ++i) {
+        std::cout << std::setprecision(2) << std::fixed
+            << "Thread " << i << ":" << std::endl
+            << "  compute detector quaternions: " << time_quat[i] << " s"
+            << std::endl
+            << "  compute pixel numbers: " << time_pix[i] << " s"
+            << std::endl
+            << "  compute Stokes weights: " << time_weight[i] << " s"
+            << std::endl
+            << "  total: " << time_tot[i] << " s" << std::endl;
+    }
+
+    return;
+}
