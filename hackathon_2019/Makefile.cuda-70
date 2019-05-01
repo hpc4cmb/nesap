@@ -40,7 +40,7 @@ toast_pointing_omp.o : toast_pointing.cpp $(HEADERS)
 	$(CXX) $(CXXFLAGS) $(OMPFLAGS) -I. -o $@ -c $<
 
 toast_pointing_cuda.o : toast_pointing.cpp $(HEADERS)
-	$(CXX) $(CXXFLAGS) -I. -o $@ -c $<
+	$(NVCC) $(NVFLAGS) -I. -o $@ -c $<
 
 clean :
 	rm -f toast_pointing toast_pointing_* *.o
