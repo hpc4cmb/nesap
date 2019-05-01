@@ -1,7 +1,7 @@
 
 # Adjust these as needed
 CXX = g++
-CXXFLAGS = -O3 -march=native -fPIC -g -std=c++11 -fopenmp
+CXXFLAGS = -O3 -march=native -fPIC -g -std=c++11 -fopenmp -DPOINTING_OPENMP
 LDFLAGS =
 LINK = -fopenmp -lm
 

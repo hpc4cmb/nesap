@@ -3,7 +3,7 @@
 
 CXX = g++
 CXXFLAGS = -O3 -march=native -fPIC -g -std=c++11
-OMPFLAGS = -fopenmp
+OMPFLAGS = -DPOINTING_OPENMP -fopenmp
 LDFLAGS =
 LINK = -lm
 
@@ -40,7 +40,7 @@ toast_pointing_omp.o : toast_pointing.cpp $(HEADERS)
 	$(CXX) $(CXXFLAGS) $(OMPFLAGS) -I. -o $@ -c $<
 
 toast_pointing_cuda.o : toast_pointing.cpp $(HEADERS)
-	$(NVCC) $(NVFLAGS) -I. -o $@ -c $<
+	$(CXX) $(CXXFLAGS) -I. -o $@ -c $<
 
 clean :
 	rm -f toast_pointing toast_pointing_* *.o

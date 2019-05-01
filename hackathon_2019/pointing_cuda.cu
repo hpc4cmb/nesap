@@ -7,10 +7,11 @@
 #include <iostream>
 #include <cstring>
 
-
 #include <cuda_runtime.h>
-#include <nvToolsExt.h>
 
+#ifdef HAVE_NVTX
+#include <nvToolsExt.h>
+#endif
 
 // 2/PI
 #define TWOINVPI 0.63661977236758134308
@@ -18,7 +19,36 @@
 // 2/3
 #define TWOTHIRDS 0.66666666666666666667
 
+
+static void CudaError(cudaError_t err, char const * file, int line) {
+    if (err != cudaSuccess) {
+        printf("%s in %s at line %d\n", cudaGetErrorString(err),
+               file, line);
+        exit(EXIT_FAILURE);
+    }
+}
+#define CUDA_CHECK(err) (CudaError(err, __FILE__, __LINE__))
+
+
 // Healpix operations needed for this test.
+
+typedef struct {
+    int64_t nside;
+    int64_t npix;
+    int64_t ncap;
+    double dnside;
+    int64_t twonside;
+    int64_t fournside;
+    int64_t nsideplusone;
+    int64_t nsideminusone;
+    double halfnside;
+    double tqnside;
+    int64_t factor;
+    int64_t jr[12];
+    int64_t jp[12];
+    uint64_t utab[0x100];
+    uint64_t ctab[0x100];
+} hpix;
 
 void hpix_init(hpix * hp, int64_t nside) {
     hp->nside = nside;
@@ -355,7 +385,7 @@ __global__ void single_detector_ring(
 }
 
 
-void toast::detector_pointing_healpix(
+void detector_pointing_healpix(
         int64_t nside, bool nest,
         toast::AlignedVector <double> const & boresight,
         toast::AlignedVector <double> const & hwpang,
@@ -652,15 +682,15 @@ void toast::pointing(
                               ndet * 3 * nsamp * sizeof(float)));
 
     for (size_t ob = 0; ob < nobs; ++ob) {
-        toast::detector_pointing_healpix(nside, nest,
-                                         boresight, hwpang,
-                                         detnames, detquat,
-                                         detcal, deteps, numSMs, streams, dev_hp,
-                                         host_boresight, host_hwpang, host_detquat,
-                                         dev_boresight, dev_hwpang, dev_detquat,
-                                         host_detpixels, host_detweights,
-                                         dev_detpixels, dev_detweights,
-                                         detpixels, detweights);
+        detector_pointing_healpix(nside, nest,
+                                  boresight, hwpang,
+                                  detnames, detquat,
+                                  detcal, deteps, numSMs, streams, dev_hp,
+                                  host_boresight, host_hwpang, host_detquat,
+                                  dev_boresight, dev_hwpang, dev_detquat,
+                                  host_detpixels, host_detweights,
+                                  dev_detpixels, dev_detweights,
+                                  detpixels, detweights);
     }
 
     // Free memory

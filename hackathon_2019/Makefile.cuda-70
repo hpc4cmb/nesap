@@ -3,7 +3,7 @@
 
 CXX = g++
 CXXFLAGS = -O3 -march=native -fPIC -g -std=c++11
-OMPFLAGS = -fopenmp
+OMPFLAGS = -DPOINTING_OPENMP -fopenmp
 LDFLAGS =
 LINK = -lm
 

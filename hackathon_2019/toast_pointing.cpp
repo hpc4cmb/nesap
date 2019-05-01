@@ -7,7 +7,7 @@
 
 #include <utils.hpp>
 
-#ifdef _OPENMP
+#ifdef POINTING_OPENMP
 #include <pointing_openmp.hpp>
 #else
 #include <pointing_cuda.hpp>

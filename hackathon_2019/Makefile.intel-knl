@@ -1,7 +1,7 @@
 
 # Adjust these as needed
 CXX = icpc
-CXXFLAGS = -std=c++11 -O3 -xmic-avx512 -g -fPIC -qopenmp
+CXXFLAGS = -std=c++11 -O3 -xmic-avx512 -g -fPIC -qopenmp -DPOINTING_OPENMP
 LDFLAGS =
 LINK = -qopenmp -lm
 
