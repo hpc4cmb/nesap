@@ -168,3 +168,13 @@ void toast::GlobalTimers::report() {
     }
     return;
 }
+
+
+void toast::update_submaps(int64_t nsubmap,
+                           toast::AlignedVector <int64_t> const & pixels,
+                           std::set <int64_t> & submaps) {
+    for (auto const & pix : pixels) {
+        submaps.emplace(pix / nsubmap);
+    }
+    return;
+}

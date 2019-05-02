@@ -3,7 +3,7 @@
 
 CXX = g++
 CXXFLAGS = -O3 -march=native -fPIC -g -std=c++11
-OMPFLAGS = -DPOINTING_OPENMP -fopenmp
+OMPFLAGS = -DUSE_OPENMP -fopenmp
 LDFLAGS =
 LINK = -lm
 
@@ -13,19 +13,23 @@ NVLDFLAGS =
 NVLINK = -lcudart -lm
 
 COMMON_OBJS = utils.o
-OMP_OBJS = toast_pointing_omp.o pointing_openmp.o
-CUDA_OBJS = toast_pointing_cuda.o pointing_cuda.o
+
+PNTG_OMP_OBJS = toast_pointing_omp.o pointing_openmp.o
+PNTG_CUDA_OBJS = toast_pointing_cuda.o pointing_cuda.o
+
+SOLV_OMP_OBJS = toast_solver_omp.o solver_openmp.o pointing_openmp.o
+SOLV_CUDA_OBJS = toast_solver_cuda.o solver_cuda.o pointing_cuda.o
 
 HEADERS = utils.hpp pointing_cuda.hpp pointing_openmp.hpp
 
 
-all : toast_pointing_omp toast_pointing_cuda
+all : toast_pointing_omp toast_pointing_cuda toast_solver_omp
 
-toast_pointing_cuda : $(CUDA_OBJS) $(COMMON_OBJS)
-	$(NVCC) $(NVLDFLAGS) -o $@ $(CUDA_OBJS) $(COMMON_OBJS) $(NVLINK)
+toast_pointing_cuda : $(PNTG_CUDA_OBJS) $(COMMON_OBJS)
+	$(CXX) $(LDFLAGS) -o $@ $(PNTG_CUDA_OBJS) $(COMMON_OBJS) $(NVLINK)
 
-toast_pointing_omp : $(OMP_OBJS) $(COMMON_OBJS)
-	$(CXX) $(LDFLAGS) -o $@ $(OMP_OBJS) $(COMMON_OBJS) $(OMPFLAGS) $(LINK)
+toast_pointing_omp : $(PNTG_OMP_OBJS) $(COMMON_OBJS)
+	$(CXX) $(LDFLAGS) -o $@ $(PNTG_OMP_OBJS) $(COMMON_OBJS) $(OMPFLAGS) $(LINK)
 
 utils.o : utils.cpp $(HEADERS)
 	$(CXX) $(CXXFLAGS) -I. -o $@ -c $<
@@ -42,5 +46,15 @@ toast_pointing_omp.o : toast_pointing.cpp $(HEADERS)
 toast_pointing_cuda.o : toast_pointing.cpp $(HEADERS)
 	$(NVCC) $(NVFLAGS) -I. -o $@ -c $<
 
+
+toast_solver_omp : $(SOLV_OMP_OBJS) $(COMMON_OBJS)
+	$(CXX) $(LDFLAGS) -o $@ $(SOLV_OMP_OBJS) $(COMMON_OBJS) $(OMPFLAGS) -lfftw3 $(LINK)
+
+toast_solver_omp.o : toast_solver.cpp $(HEADERS)
+	$(CXX) $(CXXFLAGS) $(OMPFLAGS) -I. -o $@ -c $<
+
+solver_openmp.o : solver_openmp.cpp $(HEADERS)
+	$(CXX) $(CXXFLAGS) $(OMPFLAGS) -I. -o $@ -c $<
+
 clean :
-	rm -f toast_pointing toast_pointing_* *.o
+	rm -f toast_pointing toast_pointing_* toast_solver toast_solver_* *.o

@@ -10,6 +10,7 @@
 #include <memory>
 #include <map>
 #include <vector>
+#include <set>
 
 
 namespace toast {
@@ -225,8 +226,9 @@ bool operator!=(AlignedAllocator <T1> const &,
 template <typename T>
 using AlignedVector = std::vector <T, toast::AlignedAllocator <T> >;
 
+void update_submaps(int64_t nsubmap, toast::AlignedVector <int64_t> const & pixels,
+                    std::set <int64_t> & submaps);
+
 }
-
-
 
 #endif

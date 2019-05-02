@@ -812,6 +812,102 @@ void toast::HealpixPixels::vec2ring(int64_t n, double const * vec,
 }
 
 
+void toast::single_detector(
+        bool nest,
+        toast::HealpixPixels & hp,
+        double cal,
+        double eps,
+        toast::AlignedVector <double> const & detquat,
+        int nsamp,
+        toast::AlignedVector <double> const & hwpang,
+        toast::AlignedVector <double> const & boresight,
+        toast::AlignedVector <int64_t> & pixels,
+        toast::AlignedVector <float> & weights,
+        toast::Timer & tmquat, toast::Timer & tmpix,
+        toast::Timer & tmweight) {
+
+    double xaxis[3] = {1.0, 0.0, 0.0};
+    double zaxis[3] = {0.0, 0.0, 1.0};
+    double nullquat[4] = {0.0, 0.0, 0.0, 1.0};
+
+    double eta = (1.0 - eps) / (1.0 + eps);
+
+    tmquat.start();
+
+    toast::AlignedVector <double> pntg(4 * nsamp);
+    toast::qa_mult_many_one(nsamp, boresight.data(), detquat.data(), pntg.data());
+
+    toast::AlignedVector <double> dir(3 * nsamp);
+    toast::qa_rotate_many_one(nsamp, pntg.data(), zaxis, dir.data());
+
+    tmquat.stop();
+
+    tmpix.start();
+
+    // Sky pixel
+    if (nest) {
+        hp.vec2nest(nsamp, dir.data(), pixels.data());
+    } else {
+        hp.vec2ring(nsamp, dir.data(), pixels.data());
+    }
+
+    tmpix.stop();
+
+    tmweight.start();
+
+    // Orientation vector
+    toast::AlignedVector <double> orient(3 * nsamp);
+    toast::qa_rotate_many_one(nsamp, pntg.data(), xaxis, orient.data());
+
+    // Workspace buffers that are re-used
+    toast::AlignedVector <double> buf1(nsamp);
+    toast::AlignedVector <double> buf2(nsamp);
+
+    // Compute the angle of the polarization response with respect
+    // to the local meridian.
+    double * bx = buf1.data();
+    double * by = buf2.data();
+
+    #pragma omp simd
+    for (size_t i = 0; i < nsamp; ++i) {
+        size_t off = 3 * i;
+        by[i] = orient[off + 0] * dir[off + 1] - orient[off + 1] *
+                dir[off + 0];
+        bx[i] = orient[off + 0] * (-dir[off + 2] * dir[off + 0]) +
+                orient[off + 1] * (-dir[off + 2] * dir[off + 1]) +
+                orient[off + 2] * (dir[off + 0] * dir[off + 0] +
+                                   dir[off + 1] * dir[off + 1]);
+    }
+
+    toast::AlignedVector <double> detang(nsamp);
+    toast::vfast_atan2(nsamp, by, bx, detang.data());
+
+    #pragma omp simd
+    for (size_t i = 0; i < nsamp; ++i) {
+        detang[i] += 2.0 * hwpang[i];
+        detang[i] *= 2.0;
+    }
+
+    // Compute the Stokes weights
+
+    double * sinout = buf1.data();
+    double * cosout = buf2.data();
+
+    toast::vfast_sincos(nsamp, detang.data(), sinout, cosout);
+
+    for (size_t i = 0; i < nsamp; ++i) {
+        size_t off = 3 * i;
+        weights[off + 0] = cal;
+        weights[off + 1] = cosout[i] * eta * cal;
+        weights[off + 2] = sinout[i] * eta * cal;
+    }
+
+    tmweight.stop();
+
+    return;
+}
+
+
 void toast::detector_pointing_healpix(
         int64_t nside, bool nest,
         toast::AlignedVector <double> const & boresight,
@@ -892,9 +988,7 @@ void toast::detector_pointing_healpix(
     #pragma \
     omp parallel default(none) shared(nsamp, ndet, nside, nest, boresight, hwpang, detnames, detquat, detcal, deteps, detpixels, detweights, time_quat, time_pix, time_weight, time_tot)
     {
-        double xaxis[3] = {1.0, 0.0, 0.0};
-        double zaxis[3] = {0.0, 0.0, 1.0};
-        double nullquat[4] = {0.0, 0.0, 0.0, 1.0};
+
         toast::HealpixPixels hpix(nside);
 
         toast::Timer tmquat;
@@ -917,86 +1011,10 @@ void toast::detector_pointing_healpix(
             auto const & quat = detquat.at(dname);
 
             toast::AlignedVector <int64_t> pixels(nsamp);
-            toast::AlignedVector <double> weights(3 * nsamp);
+            toast::AlignedVector <float> weights(3 * nsamp);
 
-            double eta = (1.0 - eps) / (1.0 + eps);
-
-            tmquat.start();
-
-            // Compute detector quaternions
-            toast::AlignedVector <double> pntg(4 * nsamp);
-            toast::qa_mult_many_one(nsamp, boresight.data(), quat.data(),
-                                    pntg.data());
-
-            // Direction vector
-            toast::AlignedVector <double> dir(3 * nsamp);
-            toast::qa_rotate_many_one(nsamp, pntg.data(), zaxis,
-                                      dir.data());
-
-            tmquat.stop();
-
-            tmpix.start();
-
-            // Sky pixel
-            if (nest) {
-                hpix.vec2nest(nsamp, dir.data(), pixels.data());
-            } else {
-                hpix.vec2ring(nsamp, dir.data(), pixels.data());
-            }
-
-            tmpix.stop();
-
-            tmweight.start();
-
-            // Orientation vector
-            toast::AlignedVector <double> orient(3 * nsamp);
-            toast::qa_rotate_many_one(nsamp, pntg.data(), xaxis,
-                                      orient.data());
-
-            // Workspace buffers that are re-used
-            toast::AlignedVector <double> buf1(nsamp);
-            toast::AlignedVector <double> buf2(nsamp);
-
-            // Compute the angle of the polarization response with respect
-            // to the local meridian.
-            double * bx = buf1.data();
-            double * by = buf2.data();
-
-            #pragma omp simd
-            for (size_t i = 0; i < nsamp; ++i) {
-                size_t off = 3 * i;
-                by[i] = orient[off + 0] * dir[off + 1] - orient[off + 1] *
-                        dir[off + 0];
-                bx[i] = orient[off + 0] * (-dir[off + 2] * dir[off + 0]) +
-                        orient[off + 1] * (-dir[off + 2] * dir[off + 1]) +
-                        orient[off + 2] * (dir[off + 0] * dir[off + 0] +
-                                           dir[off + 1] * dir[off + 1]);
-            }
-
-            toast::AlignedVector <double> detang(nsamp);
-            toast::vfast_atan2(nsamp, by, bx, detang.data());
-
-            #pragma omp simd
-            for (size_t i = 0; i < nsamp; ++i) {
-                detang[i] += 2.0 * hwpang[i];
-                detang[i] *= 2.0;
-            }
-
-            // Compute the Stokes weights
-
-            double * sinout = buf1.data();
-            double * cosout = buf2.data();
-
-            toast::vfast_sincos(nsamp, detang.data(), sinout, cosout);
-
-            for (size_t i = 0; i < nsamp; ++i) {
-                size_t off = 3 * i;
-                weights[off + 0] = cal;
-                weights[off + 1] = cosout[i] * eta * cal;
-                weights[off + 2] = sinout[i] * eta * cal;
-            }
-
-            tmweight.stop();
+            single_detector(nest, hpix, cal, eps, quat, nsamp, hwpang,
+                            boresight, pixels, weights, tmquat, tmpix, tmweight);
 
             #pragma omp critical
             {
@@ -1008,10 +1026,13 @@ void toast::detector_pointing_healpix(
 
             time_quat[trank] += tmquat.seconds();
             tmquat.clear();
+
             time_pix[trank] += tmpix.seconds();
             tmpix.clear();
+
             time_weight[trank] += tmweight.seconds();
             tmweight.clear();
+
             time_tot[trank] += tmtot.seconds();
             tmtot.clear();
         }
@@ -1047,13 +1068,11 @@ void toast::pointing(
     time_tot.assign(nthreads, 0.0);
 
     for (size_t ob = 0; ob < nobs; ++ob) {
-        toast::detector_pointing_healpix(nside, nest,
-                                         boresight, hwpang,
-                                         detnames, detquat,
-                                         detcal, deteps,
-                                         detpixels, detweights,
-                                         time_quat, time_pix,
-                                         time_weight, time_tot);
+        detector_pointing_healpix(nside, nest, boresight, hwpang,
+                                  detnames, detquat, detcal, deteps,
+                                  detpixels, detweights,
+                                  time_quat, time_pix,
+                                  time_weight, time_tot);
     }
 
     for (int i = 0; i < nthreads; ++i) {

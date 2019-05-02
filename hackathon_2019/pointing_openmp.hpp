@@ -122,7 +122,20 @@ class HealpixPixels {
 };
 
 
-// High-level pointing function.
+void single_detector(
+        bool nest,
+        toast::HealpixPixels & hp,
+        double cal,
+        double eps,
+        toast::AlignedVector <double> const & detquat,
+        int nsamp,
+        toast::AlignedVector <double> const & hwpang,
+        toast::AlignedVector <double> const & boresight,
+        toast::AlignedVector <int64_t> & pixels,
+        toast::AlignedVector <float> & weights,
+        toast::Timer & tmquat, toast::Timer & tmpix,
+        toast::Timer & tmweight);
+
 
 void detector_pointing_healpix(
         int64_t nside, bool nest,
@@ -139,6 +152,9 @@ void detector_pointing_healpix(
         std::vector <double> & time_weight,
         std::vector <double> & time_tot);
 
+
+// High-level functions.
+
 void pointing(
     int64_t nside, bool nest,
     toast::AlignedVector <double> const & boresight,
@@ -149,6 +165,7 @@ void pointing(
     std::map <std::string, double> const & deteps,
     std::map <std::string, toast::AlignedVector <int64_t> > & detpixels,
     std::map <std::string, toast::AlignedVector <double> > & detweights, size_t nobs);
+
 
 }
 

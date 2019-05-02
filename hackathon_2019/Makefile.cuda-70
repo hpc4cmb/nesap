@@ -22,7 +22,7 @@ HEADERS = utils.hpp pointing_cuda.hpp pointing_openmp.hpp
 all : toast_pointing_omp toast_pointing_cuda
 
 toast_pointing_cuda : $(CUDA_OBJS) $(COMMON_OBJS)
-	$(NVCC) $(NVLDFLAGS) -o $@ $(CUDA_OBJS) $(COMMON_OBJS) $(NVLINK)
+	$(CXX) $(LDFLAGS) -o $@ $(CUDA_OBJS) $(COMMON_OBJS) $(NVLINK)
 
 toast_pointing_omp : $(OMP_OBJS) $(COMMON_OBJS)
 	$(CXX) $(LDFLAGS) -o $@ $(OMP_OBJS) $(COMMON_OBJS) $(OMPFLAGS) $(LINK)

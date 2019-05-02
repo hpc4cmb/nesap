@@ -11,3 +11,8 @@ fi
 if [ ! -f "check.txt" ]; then
     curl -SL https://www.dropbox.com/s/upmqnpy9h2ezcq6/check.txt?dl=1 -o check.txt
 fi
+
+if [ ! -f "filter.txt" ]; then
+    curl -SL https://www.dropbox.com/s/n3te2cycq5yo29c/filter.txt?dl=1 -o filter.txt
+fi
+
