@@ -32,24 +32,6 @@ static void CudaError(cudaError_t err, char const * file, int line) {
 
 // Healpix operations needed for this test.
 
-typedef struct {
-    int64_t nside;
-    int64_t npix;
-    int64_t ncap;
-    double dnside;
-    int64_t twonside;
-    int64_t fournside;
-    int64_t nsideplusone;
-    int64_t nsideminusone;
-    double halfnside;
-    double tqnside;
-    int64_t factor;
-    int64_t jr[12];
-    int64_t jp[12];
-    uint64_t utab[0x100];
-    uint64_t ctab[0x100];
-} hpix;
-
 void hpix_init(hpix * hp, int64_t nside) {
     hp->nside = nside;
     hp->ncap = 2 * (nside * nside - nside);

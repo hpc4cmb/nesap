@@ -41,11 +41,6 @@ void toeplitz_multiply(
     trank = omp_get_thread_num();
     #endif
 
-    std::ostringstream msg;
-    msg.str("");
-    msg << "    thread " << trank << " start input copy";
-    std::cerr << msg.str() << std::endl;
-
     if (nffts == 1) {
         // one shot
         n_input[0] = nsamp;
@@ -120,27 +115,11 @@ void toeplitz_multiply(
             &(fdata[bufoff + off_infft[nffts - 1]]));
     }
 
-    msg.str("");
-    msg << "    thread " << trank << " stop input copy";
-    std::cerr << msg.str() << std::endl;
-
     // Forward FFTs
-
-    msg.str("");
-    msg << "    thread " << trank << " start forward fft";
-    std::cerr << msg.str() << std::endl;
 
     fftw_execute(fplan);
 
-    msg.str("");
-    msg << "    thread " << trank << " stop forward fft";
-    std::cerr << msg.str() << std::endl;
-
     // Convolve with kernel
-
-    msg.str("");
-    msg << "    thread " << trank << " start convolve";
-    std::cerr << msg.str() << std::endl;
 
     for (int k = 0; k < nffts; ++k) {
         int bufoff = k * fftlen;
@@ -149,27 +128,11 @@ void toeplitz_multiply(
         }
     }
 
-    msg.str("");
-    msg << "    thread " << trank << " stop convolve";
-    std::cerr << msg.str() << std::endl;
-
     // Reverse transform
-
-    msg.str("");
-    msg << "    thread " << trank << " start reverse transform";
-    std::cerr << msg.str() << std::endl;
 
     fftw_execute(rplan);
 
-    msg.str("");
-    msg << "    thread " << trank << " start reverse transform";
-    std::cerr << msg.str() << std::endl;
-
     // Copy back to TOD buffer
-
-    msg.str("");
-    msg << "    thread " << trank << " start output copy";
-    std::cerr << msg.str() << std::endl;
 
     for (int k = 0; k < nffts; ++k) {
         int bufoff = k * fftlen;
@@ -178,10 +141,6 @@ void toeplitz_multiply(
             &(fdata[bufoff + off_outfft[k] + n_output[k]]),
             &(tod[off_outdata[k]]));
     }
-
-    msg.str("");
-    msg << "    thread " << trank << " stop output copy";
-    std::cerr << msg.str() << std::endl;
 
     return;
 }
@@ -205,30 +164,29 @@ void solver_lhs_obs(
         std::vector <double> & time_pquat,
         std::vector <double> & time_ppix,
         std::vector <double> & time_pweight,
-        std::vector <double> & time_ptot) {
+        std::vector <double> & time_ptot,
+        std::vector <double> & time_amult,
+        std::vector <double> & time_atmult,
+        std::vector <double> & time_nmult,
+        std::vector <double> & time_tot
+    ) {
 
     size_t nsamp = (size_t)(boresight.size() / 4);
 
     size_t ndet = detnames.size();
 
-    std::map <std::string, toast::AlignedVector <int64_t> > detpixels;
-    std::map <std::string, toast::AlignedVector <double> > detweights;
-
-    for (auto const & dname : detnames) {
-        detpixels[dname].clear();
-        detweights[dname].clear();
-        detpixels[dname].resize(hwpang.size());
-        detweights[dname].resize(3 * hwpang.size());
-    }
-
     #pragma \
-    omp parallel default(none) shared(nsamp, ndet, nside, nest, boresight, hwpang, filter, detnames, detquat, detcal, deteps, fftlen, nffts, ncore, nmiddle, overlap, fplans, rplans, tfdata, trdata, nsubmap, nnz, smlocal, detpixels, detweights, result, time_pquat, time_ppix, time_pweight, time_ptot, std::cerr)
+    omp parallel default(none) shared(nsamp, ndet, nside, nest, boresight, hwpang, filter, detnames, detquat, detcal, deteps, fftlen, nffts, ncore, nmiddle, overlap, fplans, rplans, tfdata, trdata, nsubmap, nnz, smlocal, result, time_pquat, time_ppix, time_pweight, time_ptot, time_amult, time_atmult, time_nmult, time_tot, std::cerr)
     {
         toast::HealpixPixels hpix(nside);
 
-        toast::Timer tmquat;
-        toast::Timer tmpix;
-        toast::Timer tmweight;
+        toast::Timer tmpquat;
+        toast::Timer tmppix;
+        toast::Timer tmpweight;
+        toast::Timer tmptot;
+        toast::Timer tmamult;
+        toast::Timer tmatmult;
+        toast::Timer tmnmult;
         toast::Timer tmtot;
 
         std::ostringstream msg;
@@ -241,7 +199,6 @@ void solver_lhs_obs(
         #pragma omp for schedule(dynamic)
         for (size_t d = 0; d < ndet; ++d) {
             tmtot.start();
-
             auto const & dname = detnames[d];
             auto const & cal = detcal.at(dname);
             auto const & eps = deteps.at(dname);
@@ -249,97 +206,90 @@ void solver_lhs_obs(
 
             toast::AlignedVector <int64_t> pixels(nsamp);
             toast::AlignedVector <float> weights(3 * nsamp);
+            toast::AlignedVector <double> local_result(result);
 
             // Compute detector pointing
 
-            msg.str("");
-            msg << "  det " << dname << " start pointing";
-            std::cerr << msg.str() << std::endl;
+            tmptot.start();
 
             toast::single_detector(nest, hpix, cal, eps, quat, nsamp, hwpang,
-                                   boresight, pixels, weights, tmquat, tmpix, tmweight);
+                                   boresight, pixels, weights, tmpquat, tmppix,
+                                   tmpweight);
 
-            msg.str("");
-            msg << "  det " << dname << " stop pointing";
-            std::cerr << msg.str() << std::endl;
+            tmptot.stop();
 
             // Sample from starting map to create timestream
 
-            msg.str("");
-            msg << "  det " << dname << " start A";
-            std::cerr << msg.str() << std::endl;
+            tmamult.start();
 
             toast::AlignedVector <double> tod(nsamp);
             std::fill(tod.begin(), tod.end(), 0.0);
 
             for (size_t i = 0; i < nsamp; ++i) {
-                if (i % 1000 == 0) {
-                    msg.str("");
-                    msg << "    det " << dname << " passing " << i;
-                    std::cerr << msg.str() << std::endl;
-                }
                 int64_t lsm = smlocal.at(pixels[i] / nsubmap);
                 int64_t lpix = pixels[i] % nsubmap;
                 int64_t poff = nnz * ((lsm * nsubmap) + lpix);
                 int64_t toff = nnz * i;
-                for (int64_t j = 0; j < nnz; ++nnz) {
-                    tod[i] = weights[toff + j] * result[poff + j];
+                for (int64_t j = 0; j < nnz; ++j) {
+                    tod[i] = weights[toff + j] * local_result[poff + j];
                 }
             }
 
-            msg.str("");
-            msg << "  det " << dname << " stop A";
-            std::cerr << msg.str() << std::endl;
+            tmamult.stop();
 
             // Apply Toeplitz noise covariance to TOD.
 
-            msg.str("");
-            msg << "  det " << dname << " start N^1";
-            std::cerr << msg.str() << std::endl;
+            tmnmult.start();
 
             toeplitz_multiply(
                     fftlen, nffts, ncore, nmiddle, overlap,
                     fplans[trank], rplans[trank], tfdata[trank], trdata[trank],
                     filter, tod);
 
-            msg.str("");
-            msg << "  det " << dname << " stop N^1";
-            std::cerr << msg.str() << std::endl;
+            tmnmult.stop();
 
             // Accumulate to result
 
-            std::fill(result.begin(), result.end(), 0.0);
+            tmatmult.start();
 
-            msg.str("");
-            msg << "  det " << dname << " start A^T";
-            std::cerr << msg.str() << std::endl;
+            std::fill(local_result.begin(), local_result.end(), 0.0);
 
             for (size_t i = 0; i < nsamp; ++i) {
                 int64_t lsm = smlocal.at(pixels[i] / nsubmap);
                 int64_t lpix = pixels[i] % nsubmap;
                 int64_t poff = nnz * ((lsm * nsubmap) + lpix);
                 int64_t toff = nnz * i;
-                for (int64_t j = 0; j < nnz; ++nnz) {
-                    result[poff + j] += weights[toff + j] * tod[i];
+                for (int64_t j = 0; j < nnz; ++j) {
+                    local_result[poff + j] += weights[toff + j] * tod[i];
                 }
             }
 
-            msg.str("");
-            msg << "  det " << dname << " stop A^T";
-            std::cerr << msg.str() << std::endl;
+            tmatmult.stop();
 
             tmtot.stop();
 
-            time_pquat[trank] += tmquat.seconds();
-            tmquat.clear();
+            time_pquat[trank] += tmpquat.seconds();
+            tmpquat.clear();
 
-            time_ppix[trank] += tmpix.seconds();
-            tmpix.clear();
+            time_ppix[trank] += tmppix.seconds();
+            tmppix.clear();
 
-            time_pweight[trank] += tmweight.seconds();
-            tmweight.clear();
+            time_pweight[trank] += tmpweight.seconds();
+            tmpweight.clear();
 
-            time_ptot[trank] += tmtot.seconds();
+            time_ptot[trank] += tmptot.seconds();
+            tmptot.clear();
+
+            time_amult[trank] += tmamult.seconds();
+            tmamult.clear();
+
+            time_atmult[trank] += tmatmult.seconds();
+            tmatmult.clear();
+
+            time_nmult[trank] += tmnmult.seconds();
+            tmnmult.clear();
+
+            time_tot[trank] += tmtot.seconds();
             tmtot.clear();
         }
     }
@@ -375,6 +325,18 @@ void toast::solver_lhs(
     std::vector <double> time_ptot(nthreads);
     time_ptot.assign(nthreads, 0.0);
 
+    std::vector <double> time_amult(nthreads);
+    time_amult.assign(nthreads, 0.0);
+
+    std::vector <double> time_atmult(nthreads);
+    time_atmult.assign(nthreads, 0.0);
+
+    std::vector <double> time_nmult(nthreads);
+    time_nmult.assign(nthreads, 0.0);
+
+    std::vector <double> time_tot(nthreads);
+    time_tot.assign(nthreads, 0.0);
+
     // First we must pass through the pointing once in order to build up the locally
     // hit pixels.
 
@@ -398,7 +360,7 @@ void toast::solver_lhs(
     }
 
     for (size_t ob = 0; ob < nobs; ++ob) {
-        std::cerr << "start submap observation " << ob << std::endl;
+        std::cerr << "Compute locally hit pixels:  start observation " << ob << std::endl;
         detector_pointing_healpix(nside, nest, boresight, hwpang,
                                   detnames, detquat, detcal, deteps,
                                   detpixels, detweights,
@@ -407,7 +369,7 @@ void toast::solver_lhs(
         for (auto const & dname : detnames) {
             toast::update_submaps(nsubmap, detpixels[dname], submaps);
         }
-        std::cerr << "stop submap observation " << ob << std::endl;
+        std::cerr << "Compute locally hit pixels:  stop observation " << ob << std::endl;
     }
 
     detpixels.clear();
@@ -513,14 +475,15 @@ void toast::solver_lhs(
     }
 
     for (size_t ob = 0; ob < nobs; ++ob) {
-        std::cerr << "start solver_lhs_obs " << ob << std::endl;
+        std::cerr << "Compute solver LHS:  start observation " << ob << std::endl;
         solver_lhs_obs(
             nside, nest, boresight, hwpang, filtkern, detnames,
             detquat, detcal, deteps, fftlen, nffts, ncore, nmiddle, overlap,
             fplans, rplans, tfdata, trdata, nsubmap, nnz, smlocal, result,
-            time_pquat, time_ppix, time_pweight, time_ptot
+            time_pquat, time_ppix, time_pweight, time_ptot, time_amult, time_atmult,
+            time_nmult, time_tot
         );
-        std::cerr << "stop solver_lhs_obs " << ob << std::endl;
+        std::cerr << "Compute solver LHS:  stop observation " << ob << std::endl;
     }
 
     for (int i = 0; i < nthreads; ++i) {
@@ -537,7 +500,11 @@ void toast::solver_lhs(
             << std::endl
             << "  compute Stokes weights: " << time_pweight[i] << " s"
             << std::endl
-            << "  total: " << time_ptot[i] << " s" << std::endl;
+            << "  pointing total: " << time_ptot[i] << " s" << std::endl
+            << "  A multiply: " << time_amult[i] << " s" << std::endl
+            << "  N^1 multiply: " << time_nmult[i] << " s" << std::endl
+            << "  A^T multiply: " << time_atmult[i] << " s" << std::endl
+            << "  Total: " << time_tot[i] << " s" << std::endl;
     }
 
     return;

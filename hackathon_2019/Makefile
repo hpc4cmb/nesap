@@ -21,12 +21,12 @@ HEAD_COMMON = \
 utils.hpp
 
 HEAD_OMP = \
-pointing_openmp.hpp
-#solver_openmp.hpp
+pointing_openmp.hpp \
+solver_openmp.hpp
 
 HEAD_CUDA = \
-pointing_cuda.hpp
-#solver_cuda.hpp
+pointing_cuda.hpp \
+solver_cuda.hpp
 
 OBJS_COMMON = \
 utils.o
@@ -36,8 +36,8 @@ pointing_openmp.o \
 solver_openmp.o
 
 OBJS_CUDA = \
-pointing_cuda.o
-#solver_cuda.o
+pointing_cuda.o \
+solver_cuda.o
 
 LIB_COMMON = libtoastkernel_common.a
 LIB_OMP = libtoastkernel_omp.a
@@ -52,10 +52,12 @@ toast_pointing_omp \
 toast_pointing_cuda
 
 SOLVER_OBJS = \
-toast_solver_omp.o
+toast_solver_omp.o \
+toast_solver_cuda.o
 
 SOLVER_PROGS = \
-toast_solver_omp
+toast_solver_omp \
+toast_solver_cuda
 
 
 all : $(PNTG_PROGS) $(SOLVER_PROGS)
@@ -68,6 +70,9 @@ toast_pointing_cuda: % : %.o $(LIB_CUDA) $(LIB_COMMON)
 
 toast_solver_omp: % : %.o $(LIB_OMP) $(LIB_COMMON)
 	$(CXX) -o $@ $^ $(LIB_OMP) $(LIB_COMMON) $(OMPFLAGS) $(LINK)
+
+toast_solver_cuda: % : %.o $(LIB_CUDA) $(LIB_COMMON)
+	$(CXX) -o $@ $^ $(LIB_CUDA) $(LIB_COMMON) $(NVLINK)
 
 
 $(PNTG_OBJS) : $(subst _cuda.o,.cpp,$(subst _omp.o,.cpp,$@)) $(HEAD_COMMON) $(HEAD_OMP) $(HEAD_CUDA)

@@ -19,6 +19,7 @@ int main(int argc, char * argv[]) {
 
     // Number of observations
     size_t nobs = 90;
+    //size_t nobs = 1;
 
     // Read input data.
 
