@@ -314,6 +314,8 @@ void toast::solver_lhs(
     std::map <std::string, double> const & deteps, size_t nobs,
     toast::AlignedVector <double> & result) {
 
+    auto & gt = toast::GlobalTimers::get();
+
     size_t nsamp = (size_t)(boresight.size() / 4);
 
     int nthreads = omp_get_max_threads();
@@ -354,6 +356,8 @@ void toast::solver_lhs(
     std::set <int64_t> submaps;
     submaps.clear();
 
+    gt.start("Calculate local pixel distribution");
+
     std::map <std::string, toast::AlignedVector <int64_t> > detpixels;
     std::map <std::string, toast::AlignedVector <double> > detweights;
 
@@ -390,6 +394,8 @@ void toast::solver_lhs(
     }
     result.resize(nnz * nsubmap * nsmlocal);
     std::fill(result.begin(), result.end(), 1.0);
+
+    gt.stop("Calculate local pixel distribution");
 
     fftw_plan_with_nthreads(nthreads);
 
@@ -479,6 +485,8 @@ void toast::solver_lhs(
             1, fftlen, tfdata.at(i).data(), &fftlen, 1, fftlen, &kind, flags);
     }
 
+    gt.start("Calculate one iteration of LHS");
+
     for (size_t ob = 0; ob < nobs; ++ob) {
         std::cerr << "Compute solver LHS:  start observation " << ob << std::endl;
         solver_lhs_obs(
@@ -490,6 +498,8 @@ void toast::solver_lhs(
         );
         std::cerr << "Compute solver LHS:  stop observation " << ob << std::endl;
     }
+
+    gt.stop("Calculate one iteration of LHS");
 
     for (int i = 0; i < nthreads; ++i) {
         fftw_destroy_plan(fplans[i]);

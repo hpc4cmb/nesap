@@ -787,14 +787,13 @@ __global__ void multiply_AT(
     int poff;
     int toff;
     double wtemp;
-    double old;
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nsamp;
          i += blockDim.x * gridDim.x) {
         poff = nnz * pixels[i];
         toff = nnz * i;
         for (int j = 0; j < nnz; ++j) {
             wtemp = (double)weights[toff + j];
-            old = atomicAdd(&(result[poff + j]), wtemp * tod[i]);
+            atomicAdd(&(result[poff + j]), wtemp * tod[i]);
         }
     }
     return;
@@ -1098,6 +1097,8 @@ void toast::solver_lhs(
     std::map <std::string, double> const & deteps, size_t nobs,
     toast::AlignedVector <double> & result) {
 
+    auto & gt = toast::GlobalTimers::get();
+
     size_t nsamp = (size_t)(boresight.size() / 4);
 
     size_t ndet = detnames.size();
@@ -1192,6 +1193,8 @@ void toast::solver_lhs(
     std::set <int64_t> submaps;
     submaps.clear();
 
+    gt.start("Calculate local pixel distribution");
+
     std::map <std::string, toast::AlignedVector <int64_t> > detpixels;
     std::map <std::string, toast::AlignedVector <double> > detweights;
 
@@ -1239,6 +1242,8 @@ void toast::solver_lhs(
     }
     result.resize(nnz * nsubmap * nsmlocal);
     std::fill(result.begin(), result.end(), 1.0);
+
+    gt.stop("Calculate local pixel distribution");
 
     int64_t * dev_smlocal;
     CUDA_CHECK(cudaMalloc(&dev_smlocal, nsmtotal * sizeof(int64_t)));
@@ -1341,6 +1346,8 @@ void toast::solver_lhs(
 
     // Submit the solver kernels
 
+    gt.start("Calculate one iteration of LHS");
+
     for (size_t ob = 0; ob < nobs; ++ob) {
         std::cerr << "Compute solver LHS:  start submit observation " << ob << std::endl;
         solver_lhs_obs(
@@ -1362,6 +1369,8 @@ void toast::solver_lhs(
     for (size_t d = 0; d < ndet; ++d) {
         CUDA_CHECK(cudaStreamSynchronize(streams[d]));
     }
+
+    gt.stop("Calculate one iteration of LHS");
 
     // Copy result from device memory back to host.
     CUDA_CHECK(cudaMemcpy(result.data(), dev_output,
