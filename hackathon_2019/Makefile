@@ -36,8 +36,7 @@ pointing_openmp.o \
 solver_openmp.o
 
 OBJS_CUDA = \
-pointing_cuda.o \
-solver_cuda.o
+toast_cuda.o
 
 LIB_COMMON = libtoastkernel_common.a
 LIB_OMP = libtoastkernel_omp.a
