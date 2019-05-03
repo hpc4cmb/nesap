@@ -14,7 +14,7 @@ MPICXX = mpicxx
 
 # CUDA compilation
 NVCC = nvcc
-NVFLAGS = -std=c++11 -arch=compute_61 -lineinfo
+NVFLAGS = -std=c++11 -arch=compute_70 -lineinfo -DHAVE_NVTX=1
 
 # Linking flags for CUDA executables
-NVLINK = -lcufft -lcudart -lm
+NVLINK = -lcufft -lcudart -lm -lnvToolsExt

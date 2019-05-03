@@ -9,6 +9,7 @@
 #include <cstring>
 
 #include <cuda_runtime.h>
+#include <cufft.h>
 
 #ifdef HAVE_NVTX
 #include <nvToolsExt.h>
@@ -29,6 +30,14 @@ static void CudaError(cudaError_t err, char const * file, int line) {
     }
 }
 #define CUDA_CHECK(err) (CudaError(err, __FILE__, __LINE__))
+
+static void CufftError(cufftResult_t err, char const * file, int line) {
+    if (err != CUFFT_SUCCESS) {
+        printf("cufft error code %d in %s at line %d\n", err, file, line);
+        exit(EXIT_FAILURE);
+    }
+}
+#define CUFFT_CHECK(err) (CufftError(err, __FILE__, __LINE__))
 
 // Healpix operations needed for this test.
 
@@ -720,138 +729,6 @@ void toast::pointing(
     return;
 }
 
-//
-// void toeplitz_multiply(
-//         int fftlen, int nffts, int ncore, int nmiddle, int overlap,
-//         fftw_plan & fplan, fftw_plan & rplan,
-//         toast::AlignedVector <double> & fdata, toast::AlignedVector <double> & rdata,
-//         toast::AlignedVector <double> const & filter,
-//         toast::AlignedVector <double> & tod) {
-//     // Note:  TOD buffer is replaced by output.
-//     // We use "int" everywhere here since all the FFT math libraries use those.
-//     // We would never take an FFT of 2^31 samples...
-//
-//     int nsamp = (int)tod.size();
-//
-//     // Clear the input buffer
-//     std::fill(fdata.begin(), fdata.end(), 0.0);
-//
-//     std::vector <int> n_input(nffts);
-//     std::vector <int> off_indata(nffts);
-//     std::vector <int> off_infft(nffts);
-//     std::vector <int> n_output(nffts);
-//     std::vector <int> off_outdata(nffts);
-//     std::vector <int> off_outfft(nffts);
-//
-//     int trank = 1;
-//     #ifdef _OPENMP
-//     trank = omp_get_thread_num();
-//     #endif
-//
-//     if (nffts == 1) {
-//         // one shot
-//         n_input[0] = nsamp;
-//         off_indata[0] = 0;
-//         off_infft[0] = (fftlen - nsamp) >> 1;
-//
-//         n_output[0] = nsamp;
-//         off_outdata[0] = 0;
-//         off_outfft[0] = off_infft[0];
-//
-//         int bufoff = 0;
-//
-//         std::copy(&(tod[off_indata[0]]), &(tod[off_indata[0] + n_input[0]]),
-//                   &(fdata[bufoff + off_infft[0]]));
-//     } else {
-//         // first fft
-//         n_input[0] = fftlen - overlap;
-//         if (n_input[0] > nsamp) {
-//             n_input[0] = nsamp;
-//         }
-//         off_indata[0] = 0;
-//         off_infft[0] = overlap;
-//
-//         n_output[0] = ncore;
-//         off_outdata[0] = 0;
-//         off_outfft[0] = overlap;
-//
-//         int bufoff = 0;
-//
-//         std::copy(&(tod[off_indata[0]]), &(tod[off_indata[0] + n_input[0]]),
-//                   &(fdata[bufoff + off_infft[0]]));
-//
-//         // middle ffts
-//
-//         for (int k = 0; k < nmiddle; ++k) {
-//             n_output[k + 1] = ncore;
-//             off_outdata[k + 1] = (int)((nsamp - (nmiddle * ncore)) / 2) + k * ncore;
-//             off_outfft[k + 1] = overlap;
-//
-//             n_input[k + 1] = nffts;
-//             if (overlap > off_outdata[k + 1]) {
-//                 off_indata[k + 1] = 0;
-//             } else {
-//                 off_indata[k + 1] = off_outdata[k + 1] - overlap;
-//             }
-//             off_infft[k + 1] = 0;
-//
-//             bufoff = (k + 1) * fftlen;
-//             std::copy(
-//                 &(tod[off_indata[k + 1]]),
-//                 &(tod[off_indata[k + 1] + n_input[k + 1]]),
-//                 &(fdata[bufoff + off_infft[k + 1]]));
-//         }
-//
-//         // last fft
-//         n_input[nffts - 1] = fftlen - overlap;
-//         if (n_input[nffts - 1] > nsamp) {
-//             n_input[nffts - 1] = nsamp;
-//         }
-//         off_indata[nffts - 1] = nsamp - n_input[nffts - 1];
-//         off_infft[nffts - 1] = 0;
-//
-//         n_output[nffts - 1] = ncore;
-//         off_outdata[nffts - 1] = nsamp - n_output[nffts - 1];
-//         off_outfft[nffts - 1] = overlap;
-//
-//         bufoff = (nffts - 1) * fftlen;
-//
-//         std::copy(
-//             &(tod[off_indata[nffts - 1]]),
-//             &(tod[off_indata[nffts - 1] + n_input[nffts - 1]]),
-//             &(fdata[bufoff + off_infft[nffts - 1]]));
-//     }
-//
-//     // Forward FFTs
-//
-//     fftw_execute(fplan);
-//
-//     // Convolve with kernel
-//
-//     for (int k = 0; k < nffts; ++k) {
-//         int bufoff = k * fftlen;
-//         for (int i = 0; i < fftlen; ++i ) {
-//             rdata[bufoff + i] *= filter[i];
-//         }
-//     }
-//
-//     // Reverse transform
-//
-//     fftw_execute(rplan);
-//
-//     // Copy back to TOD buffer
-//
-//     for (int k = 0; k < nffts; ++k) {
-//         int bufoff = k * fftlen;
-//         std::copy(
-//             &(fdata[bufoff + off_outfft[k]]),
-//             &(fdata[bufoff + off_outfft[k] + n_output[k]]),
-//             &(tod[off_outdata[k]]));
-//     }
-//
-//     return;
-// }
-
 
 __global__ void convert_local_pixels(
         int nsamp,
@@ -884,13 +761,15 @@ __global__ void multiply_A(
     ) {
     int poff;
     int toff;
+    double wtemp;
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nsamp;
          i += blockDim.x * gridDim.x) {
         poff = nnz * pixels[i];
         toff = nnz * i;
         tod[i] = 0.0;
         for (int j = 0; j < nnz; ++j) {
-            tod[i] = weights[toff + j] * result[poff + j];
+            wtemp = (double)weights[toff + j];
+            tod[i] = wtemp * result[poff + j];
         }
     }
     return;
@@ -907,16 +786,184 @@ __global__ void multiply_AT(
     ) {
     int poff;
     int toff;
+    double wtemp;
+    double old;
     for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < nsamp;
          i += blockDim.x * gridDim.x) {
         poff = nnz * pixels[i];
         toff = nnz * i;
         for (int j = 0; j < nnz; ++j) {
-            atomicAdd(
-                &(result[poff + j]),
-                weights[toff + j] * tod[i]);
+            wtemp = (double)weights[toff + j];
+            old = atomicAdd(&(result[poff + j]), wtemp * tod[i]);
         }
     }
+    return;
+}
+
+
+__global__ void toeplitz_tod2buf(
+        int n_input,
+        int off_indata,
+        int off_infft,
+        int bufoff,
+        double * tod,
+        double * buf
+    ) {
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < n_input;
+         i += blockDim.x * gridDim.x) {
+        buf[bufoff + off_infft + i] =
+            tod[off_indata + i];
+    }
+    return;
+}
+
+
+__global__ void toeplitz_buf2tod(
+        int n_output,
+        int off_outdata,
+        int off_outfft,
+        int bufoff,
+        double * tod,
+        double * buf
+    ) {
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < n_output;
+         i += blockDim.x * gridDim.x) {
+        tod[off_outdata + i] = \
+            buf[bufoff + off_outfft + i];
+    }
+    return;
+}
+
+
+__global__ void convolve_filter(
+        int nffts,
+        int fftlen,
+        double * filter,
+        double * buf
+    ) {
+    int ft;
+    int ftsamp;
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < (nffts * fftlen);
+         i += blockDim.x * gridDim.x) {
+        ft = (int)(i / fftlen);
+        ftsamp = i % fftlen;
+        buf[ft * fftlen + ftsamp] *= filter[ftsamp];
+    }
+    return;
+}
+
+
+void toeplitz_multiply(
+        int numSMs, cudaStream_t & stream, int nsamp, int fftlen, int nffts, int ncore,
+        int nmiddle, int overlap,
+        cufftHandle & fplan, cufftHandle & rplan, double * dev_fftdata,
+        double * dev_filter, double * dev_tod) {
+    // Note:  TOD buffer is replaced by output.
+    // We use "int" everywhere here since all the FFT math libraries use those.
+    // We would never take an FFT of 2^31 samples...
+
+    int n_input[nffts];
+    int off_indata[nffts];
+    int off_infft[nffts];
+    int n_output[nffts];
+    int off_outdata[nffts];
+    int off_outfft[nffts];
+    int bufoff[nffts];
+
+    if (nffts == 1) {
+        // one shot
+        n_input[0] = nsamp;
+        off_indata[0] = 0;
+        off_infft[0] = (fftlen - nsamp) >> 1;
+        n_output[0] = nsamp;
+        off_outdata[0] = 0;
+        off_outfft[0] = off_infft[0];
+        bufoff[0] = 0;
+    } else {
+        // first fft
+        n_input[0] = fftlen - overlap;
+        if (n_input[0] > nsamp) {
+            n_input[0] = nsamp;
+        }
+        off_indata[0] = 0;
+        off_infft[0] = overlap;
+        n_output[0] = ncore;
+        off_outdata[0] = 0;
+        off_outfft[0] = overlap;
+        bufoff[0] = 0;
+
+        // middle ffts
+        for (int k = 0; k < nmiddle; ++k) {
+            n_output[k + 1] = ncore;
+            off_outdata[k + 1] = (int)((nsamp - (nmiddle * ncore)) / 2) + k * ncore;
+            off_outfft[k + 1] = overlap;
+            n_input[k + 1] = fftlen;
+            if (overlap > off_outdata[k + 1]) {
+                off_indata[k + 1] = 0;
+            } else {
+                off_indata[k + 1] = off_outdata[k + 1] - overlap;
+            }
+            off_infft[k + 1] = 0;
+            bufoff[k + 1] = (k + 1) * fftlen;
+        }
+
+        // last fft
+        n_input[nffts - 1] = fftlen - overlap;
+        if (n_input[nffts - 1] > nsamp) {
+            n_input[nffts - 1] = nsamp;
+        }
+        off_indata[nffts - 1] = nsamp - n_input[nffts - 1];
+        off_infft[nffts - 1] = 0;
+        n_output[nffts - 1] = ncore;
+        off_outdata[nffts - 1] = nsamp - n_output[nffts - 1];
+        off_outfft[nffts - 1] = overlap;
+        bufoff[nffts - 1] = (nffts - 1) * fftlen;
+    }
+
+    // Threads per block
+    int tpb = 256;
+
+    // Blocks per Grid
+    int data_bpg = (int)(((nffts * fftlen) + tpb - 1) / tpb);
+    int sys_bpg = 32 * numSMs;
+    int bpg = data_bpg;
+    if (data_bpg > sys_bpg) {
+        bpg = sys_bpg;
+    }
+
+    // Copy TOD data into FFT buffers
+
+    for (int k = 0; k < nffts; ++k) {
+        toeplitz_tod2buf <<<1, tpb, 0, stream>>> (
+            n_input[k], off_indata[k], off_infft[k], bufoff[k],
+            dev_tod, dev_fftdata);
+    }
+
+    // Forward FFTs
+
+    CUFFT_CHECK(
+        cufftExecD2Z(fplan, (cufftDoubleReal*)dev_fftdata,
+                     (cufftDoubleComplex*)dev_fftdata));
+
+    // Convolve with filter
+
+    convolve_filter <<<bpg, tpb, 0, stream>>> (
+        nffts, fftlen, dev_filter, dev_fftdata);
+
+    // Reverse transform
+
+    CUFFT_CHECK(
+        cufftExecZ2D(rplan, (cufftDoubleComplex*)dev_fftdata,
+                     (cufftDoubleReal*)dev_fftdata));
+
+    // Copy back to TOD buffer
+
+    for (int k = 0; k < nffts; ++k) {
+        toeplitz_tod2buf <<<1, tpb, 0, stream>>> (
+            n_output[k], off_outdata[k], off_outfft[k], bufoff[k],
+            dev_tod, dev_fftdata);
+    }
+
     return;
 }
 
@@ -925,7 +972,6 @@ void solver_lhs_obs(
         int64_t nside, bool nest,
         toast::AlignedVector <double> const & boresight,
         toast::AlignedVector <double> const & hwpang,
-        toast::AlignedVector <double> const & filter,
         toast::AlignedVector <std::string> const & detnames,
         std::map <std::string, toast::AlignedVector <double> > const & detquat,
         std::map <std::string, double> const & detcal,
@@ -936,9 +982,8 @@ void solver_lhs_obs(
         int64_t * host_detpixels, float * host_detweights,
         int64_t * dev_detpixels, float * dev_detweights,
         int fftlen, int nffts, int ncore, int nmiddle, int overlap,
-        // fftw_plan * fplans, fftw_plan * rplans,
-        // std::map <int, toast::AlignedVector <double> > & tfdata,
-        // std::map <int, toast::AlignedVector <double> > & trdata,
+        double * dev_filter, cufftHandle * fplans, cufftHandle * rplans,
+        double * dev_fftdata,
         int64_t nsubmap, int64_t nnz, int64_t nsmlocal, int64_t * smlocal,
         double * dev_tod, double * dev_input, double * dev_output
     ) {
@@ -977,8 +1022,12 @@ void solver_lhs_obs(
     int tpb = 256;
 
     // Blocks per Grid
-    // int bpg = (int)((nsamp + tpb - 1) / tpb);
-    int bpg = 32 * numSMs;
+    int data_bpg = (int)((nsamp + tpb - 1) / tpb);
+    int sys_bpg = 32 * numSMs;
+    int bpg = data_bpg;
+    if (data_bpg > sys_bpg) {
+        bpg = sys_bpg;
+    }
 
     for (size_t d = 0; d < ndet; ++d) {
         if (nest) {
@@ -991,7 +1040,7 @@ void solver_lhs_obs(
                 dev_hwpang,
                 dev_boresight,
                 &(dev_detpixels[d * nsamp]),
-                &(dev_detweights[d * 3 * nsamp])
+                &(dev_detweights[d * nnz * nsamp])
             );
         } else {
             single_detector_ring <<<bpg, tpb, 0, streams[d]>>> (
@@ -1021,12 +1070,14 @@ void solver_lhs_obs(
 
         // Apply Toeplitz noise covariance to TOD.
 
-
-
+        toeplitz_multiply(numSMs, streams[d], nsamp, fftlen, nffts, ncore,
+            nmiddle, overlap, fplans[d], rplans[d],
+            &(dev_fftdata[d * nffts * (fftlen+2)]),
+            dev_filter, &(dev_tod[d * nsamp]));
 
         // Accumulate to result
 
-        multiply_A <<<bpg, tpb, 0, streams[d]>>> (
+        multiply_AT <<<bpg, tpb, 0, streams[d]>>> (
             nsamp, nnz, &(dev_tod[d * nsamp]), &(dev_detpixels[d * nsamp]),
             &(dev_detweights[d * nnz * nsamp]), dev_output);
 
@@ -1130,7 +1181,9 @@ void toast::solver_lhs(
     // First we must pass through the pointing once in order to build up the locally
     // hit pixels.
 
-    // Use a typical NSIDE=16 value
+    int64_t npix = 12 * nside * nside;
+
+    // Use a typical NSIDE=16 value for the submaps
     int64_t nsubmap = 12 * 16 * 16;
 
     // We have Stokes I/Q/U values.
@@ -1174,11 +1227,13 @@ void toast::solver_lhs(
 
     // Now allocate the result map
     int64_t nsmlocal = submaps.size();
-    std::vector <int64_t> smlocal(nsmlocal);
+    int64_t nsmtotal = (int64_t)(npix / nsubmap);
+    std::vector <int64_t> smlocal(nsmtotal);
     std::fill(smlocal.begin(), smlocal.end(), -1);
 
     int64_t sm = 0;
     for (auto const & smap : submaps) {
+        //std::cout << "global sm " << smap << " --> local sm " << sm << std::endl;
         smlocal[smap] = sm;
         sm++;
     }
@@ -1186,8 +1241,8 @@ void toast::solver_lhs(
     std::fill(result.begin(), result.end(), 1.0);
 
     int64_t * dev_smlocal;
-    CUDA_CHECK(cudaMalloc(&dev_smlocal, nsmlocal * sizeof(int64_t)));
-    CUDA_CHECK(cudaMemcpy(dev_smlocal, smlocal.data(), nsmlocal * sizeof(int64_t),
+    CUDA_CHECK(cudaMalloc(&dev_smlocal, nsmtotal * sizeof(int64_t)));
+    CUDA_CHECK(cudaMemcpy(dev_smlocal, smlocal.data(), nsmtotal * sizeof(int64_t),
                           cudaMemcpyHostToDevice));
 
     double * dev_input;
@@ -1200,7 +1255,7 @@ void toast::solver_lhs(
     CUDA_CHECK(cudaMalloc(&dev_output, nnz * nsubmap * nsmlocal * sizeof(double)));
 
     double * dev_tod;
-    CUDA_CHECK(cudaMalloc(&dev_tod, nsamp * sizeof(double)));
+    CUDA_CHECK(cudaMalloc(&dev_tod, ndet * nsamp * sizeof(double)));
 
     // NOTE:  we are "cheating" here since we know that observations are all the same
     // length.  Normally we would cache all the plan lengths and batch sizes that are
@@ -1261,37 +1316,68 @@ void toast::solver_lhs(
         filtkern[i] *= scale;
     }
 
-    // Create the FFT plans
+    double * dev_filter;
+    CUDA_CHECK(cudaMalloc(&dev_filter, fftlen * sizeof(double)));
+    CUDA_CHECK(cudaMemcpy(dev_filter, filtkern.data(), fftlen * sizeof(double),
+                          cudaMemcpyHostToDevice));
 
+    // Create the FFT plans- one forward and one reverse for each stream.
 
+    cufftHandle fplans[ndet];
+    cufftHandle rplans[ndet];
+
+    for (size_t d = 0; d < ndet; ++d) {
+        CUFFT_CHECK(cufftPlan1d(&(fplans[d]), fftlen, CUFFT_D2Z, nffts));
+        CUFFT_CHECK(cufftSetStream(fplans[d], streams[d]));
+        CUFFT_CHECK(cufftPlan1d(&(rplans[d]), fftlen, CUFFT_Z2D, nffts));
+        CUFFT_CHECK(cufftSetStream(fplans[d], streams[d]));
+    }
+
+    // NOTE:  cufft R2C transforms require buffers of 2(N/2 + 1) elements
+
+    double * dev_fftdata;
+    CUDA_CHECK(
+        cudaMalloc(&dev_fftdata, ndet * nffts * fftlen * sizeof(cufftDoubleComplex)));
 
     // Submit the solver kernels
 
     for (size_t ob = 0; ob < nobs; ++ob) {
-        std::cerr << "Compute solver LHS:  start observation " << ob << std::endl;
+        std::cerr << "Compute solver LHS:  start submit observation " << ob << std::endl;
         solver_lhs_obs(
-            nside, nest, boresight, hwpang, filtkern, detnames,
+            nside, nest, boresight, hwpang, detnames,
             detquat, detcal, deteps, numSMs, streams, dev_hp, host_boresight,
             host_hwpang, host_detquat, dev_boresight, dev_hwpang, dev_detquat,
             host_detpixels, host_detweights, dev_detpixels, dev_detweights,
-            fftlen, nffts, ncore, nmiddle, overlap,
-            // FFT info here...
+            fftlen, nffts, ncore, nmiddle, overlap, dev_filter,
+            fplans, rplans, dev_fftdata,
             nsubmap, nnz, nsmlocal, dev_smlocal, dev_tod, dev_input, dev_output
         );
-        std::cerr << "Compute solver LHS:  stop observation " << ob << std::endl;
+        std::cerr << "Compute solver LHS:  stop submit observation " << ob << std::endl;
     }
 
-    // Copy result from device memory back to host.
-
-
     // Synchronize streams.
+
+    std::cerr << "Compute solver LHS:  stream sync..." << std::endl;
 
     for (size_t d = 0; d < ndet; ++d) {
         CUDA_CHECK(cudaStreamSynchronize(streams[d]));
     }
 
+    // Copy result from device memory back to host.
+    CUDA_CHECK(cudaMemcpy(result.data(), dev_output,
+                          nnz * nsubmap * nsmlocal * sizeof(double),
+                          cudaMemcpyDeviceToHost));
+
     // Free memory
 
+    CUDA_CHECK(cudaFree(dev_fftdata));
+
+    for (size_t d = 0; d < ndet; ++d) {
+        CUFFT_CHECK(cufftDestroy(fplans[d]));
+        CUFFT_CHECK(cufftDestroy(rplans[d]));
+    }
+
+    CUDA_CHECK(cudaFree(dev_filter));
     CUDA_CHECK(cudaFree(dev_smlocal));
     CUDA_CHECK(cudaFree(dev_tod));
     CUDA_CHECK(cudaFree(dev_input));
@@ -1314,17 +1400,6 @@ void toast::solver_lhs(
     for (size_t d = 0; d < ndet; ++d) {
         CUDA_CHECK(cudaStreamDestroy(streams[d]));
     }
-
-
-
-
-
-
-
-
-
-
-
 
     return;
 }

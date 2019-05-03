@@ -128,7 +128,7 @@ int main(int argc, char * argv[]) {
 
     gt.start("Total Calculation");
 
-    int64_t nside = 2048;
+    int64_t nside = 1024;
     bool nest = true;
 
     toast::AlignedVector <double> result;

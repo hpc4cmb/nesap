@@ -80,7 +80,7 @@ void toeplitz_multiply(
             off_outdata[k + 1] = (int)((nsamp - (nmiddle * ncore)) / 2) + k * ncore;
             off_outfft[k + 1] = overlap;
 
-            n_input[k + 1] = nffts;
+            n_input[k + 1] = fftlen;
             if (overlap > off_outdata[k + 1]) {
                 off_indata[k + 1] = 0;
             } else {
@@ -218,6 +218,15 @@ void solver_lhs_obs(
 
             tmptot.stop();
 
+            // Convert global pixels to local pixels
+
+            for (size_t i = 0; i < nsamp; ++i) {
+                int64_t gsm = pixels[i] / nsubmap;
+                int64_t smpix = pixels[i] % nsubmap;
+                int64_t lsm = smlocal.at(gsm);
+                pixels[i] = (lsm * nsubmap) + smpix;
+            }
+
             // Sample from starting map to create timestream
 
             tmamult.start();
@@ -226,9 +235,7 @@ void solver_lhs_obs(
             std::fill(tod.begin(), tod.end(), 0.0);
 
             for (size_t i = 0; i < nsamp; ++i) {
-                int64_t lsm = smlocal.at(pixels[i] / nsubmap);
-                int64_t lpix = pixels[i] % nsubmap;
-                int64_t poff = nnz * ((lsm * nsubmap) + lpix);
+                int64_t poff = nnz * pixels[i];
                 int64_t toff = nnz * i;
                 for (int64_t j = 0; j < nnz; ++j) {
                     tod[i] = weights[toff + j] * local_result[poff + j];
@@ -255,9 +262,7 @@ void solver_lhs_obs(
             std::fill(local_result.begin(), local_result.end(), 0.0);
 
             for (size_t i = 0; i < nsamp; ++i) {
-                int64_t lsm = smlocal.at(pixels[i] / nsubmap);
-                int64_t lpix = pixels[i] % nsubmap;
-                int64_t poff = nnz * ((lsm * nsubmap) + lpix);
+                int64_t poff = nnz * pixels[i];
                 int64_t toff = nnz * i;
                 for (int64_t j = 0; j < nnz; ++j) {
                     local_result[poff + j] += weights[toff + j] * tod[i];
