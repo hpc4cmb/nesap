@@ -59,7 +59,8 @@ toast_solver_omp \
 toast_solver_cuda
 
 
-all : $(PNTG_PROGS) $(SOLVER_PROGS)
+
+all : $(SOLVER_PROGS) $(PNTG_PROGS) 
 
 toast_pointing_omp: % : %.o $(LIB_OMP) $(LIB_COMMON)
 	$(CXX) -o $@ $^ $(LIB_OMP) $(LIB_COMMON) $(OMPFLAGS) $(LINK)

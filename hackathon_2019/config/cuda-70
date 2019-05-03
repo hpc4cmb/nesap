@@ -1,13 +1,13 @@
 
 # Normal C++ compilation
 CXX = g++
-CXXFLAGS = -O3 -march=native -g -std=c++11
+CXXFLAGS = -O3 -march=native -g -std=c++11 -I$(FFTW_INC)
 
 # Flags to enable OpenMP on compile and link
 OMPFLAGS = -DUSE_OPENMP -fopenmp
 
 # Linking flags for non-CUDA C++ executables
-LINK = -lfftw3_omp -lfftw3 -lm
+LINK = -L$(FFTW_DIR) -lfftw3_omp -lfftw3 -lm
 
 # MPI C++ compiler
 MPICXX = mpicxx
@@ -17,4 +17,4 @@ NVCC = nvcc
 NVFLAGS = -std=c++11 -arch=compute_70 -lineinfo -DHAVE_NVTX=1
 
 # Linking flags for CUDA executables
-NVLINK = -lcufft -lcudart -lm -lnvToolsExt
+NVLINK = -L$(CUDA_ROOT)/lib64 -lcufft -lcudart -lm -lnvToolsExt
